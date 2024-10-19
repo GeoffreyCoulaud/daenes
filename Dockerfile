@@ -9,4 +9,8 @@ RUN rm /tmp/requirements.txt
 COPY src /src
 WORKDIR /src
 
+# Volumes
+VOLUME /var/run/docker.sock
+VOLUME /zones
+
 CMD ["python", "main.py"]
