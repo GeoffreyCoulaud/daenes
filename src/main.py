@@ -64,13 +64,9 @@ class Application:
         """App entry point, in charge of setting up the app and starting the loop"""
         self._setup()
         while True:
-            try:
-                self._loop()
-            except (Exception,) as exception:
-                logging.error("Retryable error in lifecycle", exc_info=exception)
-                sleep(self.__retry_interval)
-            else:
-                sleep(self.__success_interval)
+            # TODO error handling
+            self._loop()
+            sleep(self.__success_interval)
 
 
 if __name__ == "__main__":
