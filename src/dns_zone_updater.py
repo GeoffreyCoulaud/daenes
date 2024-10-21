@@ -3,6 +3,7 @@ from pathlib import Path
 from dns import RecordBuilder, SoaRecord
 from local_domain import LocalDomain
 
+# TODO refactor this class
 
 class DnsZoneUpdater:
 
@@ -14,9 +15,8 @@ class DnsZoneUpdater:
         self.__dns_ip = dns_ip
 
     def _create_zone(self, local_domain: LocalDomain, serial: int) -> str:
-        domain = local_domain.domain
+        domain = local_domain.container_domain
         domain_ip = local_domain.ip
-        container_id = local_domain.container_id
         ns = f"ns.{domain}"
         return "\n".join(
             f"$ORIGIN {domain}.",
@@ -25,7 +25,6 @@ class DnsZoneUpdater:
             RecordBuilder.create_ns_record(domain, ns),
             RecordBuilder.create_a_record(ns, self.__dns_ip),
             RecordBuilder.create_a_record(domain, domain_ip),
-            RecordBuilder.create_txt_record(domain, f"container_id={container_id}"),
         )
 
     def _update_zone_file(self, zone_file: Path, local_domain: LocalDomain):
@@ -55,7 +54,7 @@ class DnsZoneUpdater:
         # Create zone files for the local domains
         visited = set[Path]()
         for local_domain in local_domains:
-            zone_file = self.__dir / f"{local_domain.domain}.zone"
+            zone_file = self.__dir / f"{local_domain.container_domain}.zone"
             self._update_zone_file(zone_file, local_domain)
             visited.add(zone_file)
 

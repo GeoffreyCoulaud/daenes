@@ -1,0 +1,96 @@
+networks:
+  # Network that should not be considered
+  some-basic-network:
+
+  # Network that should be considered
+  public-services-network:
+    labels:
+      - daenes.enabled=true
+      - daenes.domain=public-network.internal
+  
+  # Another network that should be considered
+  admin-services-network:
+    labels:
+      - daenes.enabled=true
+      - daenes.domain=admin-network.internal
+
+services:
+
+  daenes:
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - SUCCESS_INTERVAL=30
+      - RETRY_INTERVAL=5
+      - DNS_IP=0.0.0.0
+      - LOG_LEVEL=DEBUG
+
+  # Some service that should not be considered
+  web1:
+    container_name: INVISIBLE-OUT-OF-NETWORK
+    image: httpd:latest
+    ports:
+      - "8181:80"
+    volumes:
+      - ./sample-website:/usr/local/apache2/htdocs
+    networks:
+      - some-basic-network
+    labels:
+      # This service should not be considered, even if it has the label
+      # because it is not in a network that has the label
+      - daenes.enabled=true
+
+  # Some service that should be considered, on the public network
+  # Should generate a DNS entry for web.public-network.internal
+  web2:
+    container_name: web2
+    image: httpd:latest
+    ports:
+      - "8282:80"
+    volumes:
+      - ./sample-website:/usr/local/apache2/htdocs
+    networks:
+      - public-services-network
+
+  # Some service that should be considered, on the public network
+  # Should generate a DNS entry for web2.public-network.internal
+  web3:
+    container_name: ZSJKHDUIQKJSHDsqjs
+    image: httpd:latest
+    ports:
+      - "8383:80"
+    volumes:
+      - ./sample-website:/usr/local/apache2/htdocs
+    networks:
+      - public-services-network
+    labels:
+      - daenes.domain=web3
+
+  # Some service that shouldn't be considered, even if it is on the public network
+  web4:
+    container_name: INVISIBLE-EXPLICITLY-DISABLED
+    image: httpd:latest
+    ports:
+      - "8484:80"
+    volumes:
+      - ./sample-website:/usr/local/apache2/htdocs
+    networks:
+      - public-services-network
+    labels:
+      - daenes.enabled=false
+
+  # Some service that should be considered on both networks
+  # Should generate a DNS entry for web3.public-network.internal and web3.admin-network.internal
+  web5:
+    container_name: web5
+    image: httpd:latest
+    ports:
+      - "8585:80"
+    volumes:
+      - ./sample-website:/usr/local/apache2/htdocs
+    networks:
+      - public-services-network
+      - admin-services-network
