@@ -5,8 +5,15 @@ import sys
 from os import getenv
 from time import sleep
 
-from dns_zone_updater import DnsZoneUpdater
-from docker_label_observer import DockerLabelObserver
+from src.services.dns_service import DnsService
+from src.services.docker_service import DockerService
+
+
+def mgetenv(name: str) -> str:
+    var = getenv(name)
+    if var is None:
+        logging.error("Environment variable %s is mandatory. Exiting.", var)
+        exit(1)
 
 
 class Application:
@@ -14,8 +21,8 @@ class Application:
     __success_interval: int
     __retry_interval: int
 
-    __docker_label_observer: DockerLabelObserver
-    __dns_zone_updater: DnsZoneUpdater
+    __docker_service: DockerService
+    __dns_service: DnsService
 
     def __mgetenv(self, name: str) -> str:
         """Get an environment variable or exit if it is not set"""
@@ -49,24 +56,21 @@ class Application:
         self._setup_logging()
         self.__success_interval = int(self.__mgetenv("SUCCESS_INTERVAL"))
         self.__retry_interval = int(self.__mgetenv("RETRY_INTERVAL"))
-        self.__docker_label_observer = DockerLabelObserver()
-        # self.__dns_zone_updater = DnsZoneUpdater(
-        #     dir_="/zones",
-        #     dns_ip=self.__mgetenv("DNS_IP"),
-        # )
+        self.__docker_service = DockerService()
+        self.__dns_service = DnsService(
+            zone_files_dir=getenv("DNS_ZONE_FILES_DIR", "/zones"),
+            dns_ipv4=mgetenv("DNS_IP"),
+            ttl=int(getenv("DNS_TTL", "3600")),
+        )
 
     def _loop(self) -> None:
         """Function called in a loop to check for changes in the forwarded port"""
-        local_domains = self.__docker_label_observer.get_local_domains()
+        domains = self.__docker_service.get_local_domains()
         logging.info(
             "Local domains: \n%s",
-            json.dumps(
-                [d.to_json() for d in local_domains],
-                indent=2,
-                sort_keys=True,
-            ),
+            json.dumps([d.to_json() for d in domains], indent=2, sort_keys=True),
         )
-        # self.__dns_zone_updater.update_zone_files(local_domains)
+        # self.__dns_service.update_zones(domains)
 
     def run(self) -> None:
         """App entry point, in charge of setting up the app and starting the loop"""

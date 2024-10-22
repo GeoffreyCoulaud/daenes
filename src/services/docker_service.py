@@ -5,14 +5,14 @@ from docker.models.containers import Container
 from docker.models.networks import Network
 
 from constants import PROJECT
-from local_domain import LocalDomain
+from models.local_domain import LocalDomain
 
 
 class MissingNetworkDomainLabel(Exception):
     """Exception raised when the network domain label is missing"""
 
 
-class DockerLabelObserver:
+class DockerService:
 
     __container_enabled_label: str
     __container_domain_label: str
@@ -23,7 +23,7 @@ class DockerLabelObserver:
 
     def _create_label(self, label: str) -> str:
         """Create a docker label prefixed by the project name and the domain name"""
-        return f"{PROJECT}.{label}"
+        return f"daenes.{label}"
 
     def __init__(self) -> None:
         self.__container_domain_label = self._create_label("domain")
@@ -114,9 +114,9 @@ class DockerLabelObserver:
                 )
 
                 yield LocalDomain(
-                    network_domain=network_domain,
-                    container_domain=container_domain,
-                    container_ipv4=ipv4,
+                    parent=network_domain,
+                    domain=container_domain,
+                    ipv4=ipv4,
                 )
 
     def get_local_domains(self) -> list[LocalDomain]:
