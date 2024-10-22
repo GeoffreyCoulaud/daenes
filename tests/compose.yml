@@ -14,6 +14,9 @@ networks:
       - daenes.enabled=true
       - daenes.domain=admin-network.internal
 
+volumes:
+  zones:
+
 services:
 
   daenes:
@@ -22,6 +25,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - zones:/zones
     environment:
       - SUCCESS_INTERVAL=30
       - RETRY_INTERVAL=5

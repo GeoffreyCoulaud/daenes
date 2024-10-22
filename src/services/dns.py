@@ -1,21 +1,63 @@
+from functools import partial
 from itertools import groupby
 import logging
 from pathlib import Path
-from typing import Generator, Iterable
+from typing import Callable, Generator, Iterable, Protocol
 
+import dns
 from dns.zone import Zone, from_file as zone_from_file
-from dns.rdataclass import IN
-from dns.name import from_text as name_from_text
+from dns.rdataclass import IN, RdataClass
+from dns.name import Name, from_text as name_from_text
 from dns.rdtypes.ANY.SOA import SOA
 from dns.rdtypes.ANY.NS import NS
 from dns.rdtypes.IN.A import A
 from dns import rdatatype
 
-from models.local_domain import LocalDomain, LocalDomainGroup
+from models.local_domain import LocalDomain
 
 
 class InvalidSubdomainError(Exception):
     """Raised when a subdomain is not a valid subdomain of a domain"""
+
+
+class ZoneFactory(Protocol):
+
+    def __call__(
+        self,
+        origin: Name | str | None,
+        rdclass: RdataClass = dns.rdataclass.IN,
+    ) -> Zone: ...
+
+
+class FileSystemZone(Zone):
+
+    __path: Path
+
+    def __init__(
+        self,
+        path: Path,
+        origin: Name | str | None,
+        rdclass: RdataClass = dns.rdataclass.IN,
+        relativize: bool = True,
+    ) -> None:
+        super().__init__(origin, rdclass, relativize)
+        self.__path = path
+
+    def get_path(self) -> Path:
+        """Get the path of the zone file"""
+        return self.__path
+
+    def to_file(
+        self,
+        sorted: bool = True,
+        relativize: bool = True,
+        nl: str | None = None,
+        want_comments: bool = False,
+        want_origin: bool = False,
+    ) -> None:
+        return super().to_file(
+            str(self.__path), sorted, relativize, nl, want_comments, want_origin
+        )
 
 
 class DnsService:
@@ -30,14 +72,18 @@ class DnsService:
         self.__dns_ip = dns_ipv4
         self.__ttl = ttl
 
-    def _make_zone(self, domain_group: LocalDomainGroup, serial: int = 0) -> Zone:
+    def _make_zone(
+        self,
+        parent: str,
+        domains: Iterable[str],
+        previous_zone: Zone | None,
+        zone_factory: ZoneFactory = Zone,
+    ) -> Zone:
 
-        parent = domain_group.parent
-        domains = domain_group.domains
-
+        serial = 1 + (-1 if previous_zone is None else previous_zone.get_soa().serial)
         zone_name = name_from_text(f"{parent}.")
         ns_name = name_from_text(f"ns.{parent}.")
-        zone = Zone(origin=zone_name)
+        zone = zone_factory(origin=zone_name)
 
         # Data for "parent" domain
         parent_node = zone.find_node(zone_name, create=True)
@@ -78,26 +124,18 @@ class DnsService:
             a_rdataset.update_ttl(self.__ttl)
             a_rdataset.add(a_rdata)
 
-    def _update_zone(self, domain_group: LocalDomainGroup):
-        path = self.__zone_files_dir / f"{domain_group.parent}.zone"
-        try:
-            serial = zone_from_file(str(path), check_origin=True).get_soa().serial
-        except Exception as error:
-            logging.warning("Couldn't find zone current serial", exc_info=error)
-            serial = 0
-        zone = self._make_zone(domain_group=domain_group, serial=serial + 1)
-        zone.to_file(str(path), relativize=False)
-
-    def _group_local_domains(
+    def make_updated_zones(
         self, domains: Iterable[LocalDomain]
-    ) -> Generator[LocalDomainGroup, None, None]:
+    ) -> Generator[FileSystemZone, None, None]:
         for parent, domains in groupby(domains, lambda d: d.parent):
-            yield LocalDomainGroup(parent=parent, domains=domains)
-
-    def update_zones(self, domains: Iterable[LocalDomain]) -> None:
-        for domain_group in self._group_local_domains(domains=domains):
-            self._update_zone(domain_group=domain_group)
-
-    def get_zones(self) -> Generator[Zone, None, None]:
-        for path in self.__zone_files_dir.glob("*.zone"):
-            yield zone_from_file(str(path))
+            path = self.__zone_files_dir / f"{parent}.zone"
+            try:
+                previous_zone = zone_from_file(str(path))
+            except Exception:
+                previous_zone = None
+            yield self._make_zone(
+                parent=parent,
+                domains=domains,
+                previous_zone=previous_zone,
+                zone_factory=partial(FileSystemZone, path=path),
+            )

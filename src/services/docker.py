@@ -4,7 +4,6 @@ from docker.client import DockerClient
 from docker.models.containers import Container
 from docker.models.networks import Network
 
-from constants import PROJECT
 from models.local_domain import LocalDomain
 
 
@@ -86,7 +85,7 @@ class DockerService:
         container.reload()
         return container.attrs["NetworkSettings"]["Networks"][network.name]["IPAddress"]
 
-    def yield_local_domains(self) -> Generator[LocalDomain, None, None]:
+    def get_local_domains(self) -> Generator[LocalDomain, None, None]:
         """Get all the local domains from the docker API from a generator"""
 
         for network in self._get_enabled_networks():
@@ -118,7 +117,3 @@ class DockerService:
                     domain=container_domain,
                     ipv4=ipv4,
                 )
-
-    def get_local_domains(self) -> list[LocalDomain]:
-        """Get all the local domains from the docker API"""
-        return [d for d in self.yield_local_domains()]

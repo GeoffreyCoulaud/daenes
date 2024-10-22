@@ -1,35 +1,27 @@
-import json
 import logging
 import logging.config as logging_config
 import sys
 from os import getenv
 from time import sleep
 
-from src.services.dns_service import DnsService
-from src.services.docker_service import DockerService
+from services.dns import DnsService
+from services.docker import DockerService
 
 
 def mgetenv(name: str) -> str:
-    var = getenv(name)
-    if var is None:
-        logging.error("Environment variable %s is mandatory. Exiting.", var)
-        exit(1)
+    """Get an environment variable or exit if it is not set"""
+    if (value := getenv(name)) is None:
+        logging.critical("Environment variable %s is required", name)
+        sys.exit(1)
+    return value
 
 
 class Application:
 
-    __success_interval: int
-    __retry_interval: int
-
+    __sleep_on_success: int
+    __sleep_on_error: int
     __docker_service: DockerService
     __dns_service: DnsService
-
-    def __mgetenv(self, name: str) -> str:
-        """Get an environment variable or exit if it is not set"""
-        if (value := getenv(name)) is None:
-            logging.critical("Environment variable %s is required", name)
-            sys.exit(1)
-        return value
 
     def _setup_logging(self) -> None:
         # Configure logging
@@ -54,23 +46,26 @@ class Application:
     def _setup(self) -> None:
         """Setup the application"""
         self._setup_logging()
-        self.__success_interval = int(self.__mgetenv("SUCCESS_INTERVAL"))
-        self.__retry_interval = int(self.__mgetenv("RETRY_INTERVAL"))
+        self.__sleep_on_success = int(mgetenv("SLEEP_ON_SUCCESS"))
+        self.__sleep_on_error = int(mgetenv("SLEEP_ON_ERROR"))
         self.__docker_service = DockerService()
         self.__dns_service = DnsService(
-            zone_files_dir=getenv("DNS_ZONE_FILES_DIR", "/zones"),
+            zone_files_dir=mgetenv("DNS_ZONE_FILES_DIR"),
             dns_ipv4=mgetenv("DNS_IP"),
-            ttl=int(getenv("DNS_TTL", "3600")),
+            ttl=int(mgetenv("DNS_TTL")),
         )
 
     def _loop(self) -> None:
         """Function called in a loop to check for changes in the forwarded port"""
-        domains = self.__docker_service.get_local_domains()
-        logging.info(
-            "Local domains: \n%s",
-            json.dumps([d.to_json() for d in domains], indent=2, sort_keys=True),
-        )
-        # self.__dns_service.update_zones(domains)
+        domains = list(self.__docker_service.get_local_domains())
+        logging.debug("Local domains from docker")
+        for domain in domains:
+            logging.debug("%s", domain.to_json())
+        zones = list(self.__dns_service.make_updated_zones(domains))
+        logging.debug("Local DNS zones")
+        for zone in zones:
+            logging.debug("%s:\n%s", zone.get_path().name, zone.to_text())
+            zone.to_file()
 
     def run(self) -> None:
         """App entry point, in charge of setting up the app and starting the loop"""
@@ -78,7 +73,7 @@ class Application:
         while True:
             # TODO error handling
             self._loop()
-            sleep(self.__success_interval)
+            sleep(self.__sleep_on_success)
 
 
 if __name__ == "__main__":
