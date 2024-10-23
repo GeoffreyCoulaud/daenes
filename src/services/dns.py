@@ -56,7 +56,12 @@ class FileSystemZone(Zone):
         want_origin: bool = False,
     ) -> None:
         return super().to_file(
-            str(self.__path), sorted, relativize, nl, want_comments, want_origin
+            str(self.__path),
+            sorted=sorted,
+            relativize=relativize,
+            nl=nl,
+            want_comments=want_comments,
+            want_origin=want_origin,
         )
 
 
