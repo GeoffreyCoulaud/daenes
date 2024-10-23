@@ -1,5 +1,6 @@
 import logging
 import logging.config as logging_config
+from pathlib import Path
 import sys
 from os import getenv
 from time import sleep
@@ -50,7 +51,7 @@ class Application:
         self.__sleep_on_error = int(mgetenv("SLEEP_ON_ERROR"))
         self.__docker_service = DockerService()
         self.__dns_service = DnsService(
-            zone_files_dir=mgetenv("DNS_ZONE_FILES_DIR"),
+            zone_files_dir=Path(mgetenv("DNS_ZONE_FILES_DIR")),
             dns_ipv4=mgetenv("DNS_IP"),
             ttl=int(mgetenv("DNS_TTL")),
         )
@@ -64,8 +65,12 @@ class Application:
         zones = list(self.__dns_service.make_updated_zones(domains))
         logging.debug("Local DNS zones")
         for zone in zones:
-            logging.debug("%s:\n%s", zone.get_path().name, zone.to_text())
-            zone.to_file()
+            logging.debug(
+                "%s:\n%s",
+                zone.get_path().name,
+                zone.to_text(want_origin=True),
+            )
+            # zone.to_file()
 
     def run(self) -> None:
         """App entry point, in charge of setting up the app and starting the loop"""

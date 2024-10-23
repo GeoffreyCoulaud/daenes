@@ -2,7 +2,7 @@ from functools import partial
 from itertools import groupby
 import logging
 from pathlib import Path
-from typing import Callable, Generator, Iterable, Protocol
+from typing import Any, Generator, Iterable, Protocol
 
 import dns
 from dns.zone import Zone, from_file as zone_from_file
@@ -49,14 +49,18 @@ class FileSystemZone(Zone):
 
     def to_file(
         self,
+        f: Any = None,
         sorted: bool = True,
         relativize: bool = True,
         nl: str | None = None,
-        want_comments: bool = False,
-        want_origin: bool = False,
+        want_comments: bool = True,
+        want_origin: bool = True,
     ) -> None:
+        # Only use the override if provided
+        f = f if f is not None else str(self.__path)
+        # Write to disk
         return super().to_file(
-            str(self.__path),
+            f=f,
             sorted=sorted,
             relativize=relativize,
             nl=nl,
@@ -79,7 +83,7 @@ class DnsService:
     def _make_zone(
         self,
         parent: str,
-        domains: Iterable[str],
+        domains: Iterable[LocalDomain],
         previous_zone: Zone | None,
         zone_factory: ZoneFactory = Zone,
     ) -> Zone:
@@ -113,13 +117,14 @@ class DnsService:
         parent_ns_rdataset.add(parent_ns_rdata)
 
         # Add an additional NS subdomain
-        for domain in [d for d in domains if d.domain == "ns"]:
-            raise InvalidSubdomainError("Cannot have a subdomain named 'ns'")
         domains_including_ns = list(domains)
+        for domain in [d for d in domains if d == "ns"]:
+            raise InvalidSubdomainError("Cannot have a subdomain named 'ns'")
         domains_including_ns.append(LocalDomain(parent, "ns", self.__dns_ip))
 
         # Data for other subdomains
-        for domain in domains:
+        for domain in domains_including_ns:
+            logging.debug("Including %s subdomain in %s zone", domain.domain, parent)
             domain_name = name_from_text(f"{domain.domain}.{parent}.")
             zone_domain_node = zone.find_node(domain_name, create=True)
             # A record
@@ -127,6 +132,8 @@ class DnsService:
             a_rdataset = zone_domain_node.find_rdataset(IN, rdatatype.A, create=True)
             a_rdataset.update_ttl(self.__ttl)
             a_rdataset.add(a_rdata)
+
+        return zone
 
     def make_updated_zones(
         self, domains: Iterable[LocalDomain]
@@ -136,6 +143,7 @@ class DnsService:
             try:
                 previous_zone = zone_from_file(str(path))
             except Exception:
+                logging.warning("Could not find existing zone at %s", str(path))
                 previous_zone = None
             yield self._make_zone(
                 parent=parent,
