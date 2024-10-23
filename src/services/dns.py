@@ -69,7 +69,6 @@ class DnsService:
 
     __zone_files_dir: Path
     __dns_ip: str
-
     __ttl: int
 
     def __init__(self, zone_files_dir: Path, dns_ipv4: str, ttl: int = 3600):
