@@ -3,16 +3,17 @@ networks:
   some-basic-network:
 
   # Network that should be considered
-  public-services-network:
+  services:
     labels:
       - daenes.enabled=true
-      - daenes.domain=public-network.internal
+      - daenes.domain=services.internal
   
   # Another network that should be considered
-  admin-services-network:
+  # Its domain should be admin-services.internal
+  admin-services:
     labels:
       - daenes.enabled=true
-      - daenes.domain=admin-network.internal
+      - daenes.domain=admin-services.internal
 
 services:
 
@@ -24,10 +25,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./zones:/zones
     environment:
-      - SUCCESS_INTERVAL=30
-      - RETRY_INTERVAL=5
+      - INTERVAL=30
       - DNS_IP=0.0.0.0
-      - LOG_LEVEL=DEBUG
 
   # Some service that should not be considered
   web1:
@@ -45,7 +44,7 @@ services:
       - daenes.enabled=true
 
   # Some service that should be considered, on the public network
-  # Should generate a DNS entry for web.public-network.internal
+  # Should generate a DNS entry for web.services.internal
   web2:
     container_name: web2
     image: httpd:latest
@@ -54,10 +53,10 @@ services:
     volumes:
       - ./sample-website:/usr/local/apache2/htdocs
     networks:
-      - public-services-network
+      - services
 
   # Some service that should be considered, on the public network
-  # Should generate a DNS entry for web2.public-network.internal
+  # Should generate a DNS entry for web2.services.internal
   web3:
     container_name: ZSJKHDUIQKJSHDsqjs
     image: httpd:latest
@@ -66,7 +65,7 @@ services:
     volumes:
       - ./sample-website:/usr/local/apache2/htdocs
     networks:
-      - public-services-network
+      - services
     labels:
       - daenes.domain=web3
 
@@ -79,12 +78,12 @@ services:
     volumes:
       - ./sample-website:/usr/local/apache2/htdocs
     networks:
-      - public-services-network
+      - services
     labels:
       - daenes.enabled=false
 
   # Some service that should be considered on both networks
-  # Should generate a DNS entry for web3.public-network.internal and web3.admin-network.internal
+  # Should generate a DNS entry for web3.services.internal and web3.admin-services.internal
   web5:
     container_name: web5
     image: httpd:latest
@@ -93,5 +92,5 @@ services:
     volumes:
       - ./sample-website:/usr/local/apache2/htdocs
     networks:
-      - public-services-network
-      - admin-services-network
+      - services
+      - admin-services
