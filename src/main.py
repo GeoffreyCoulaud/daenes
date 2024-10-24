@@ -5,8 +5,9 @@ import sys
 from os import getenv
 from time import sleep
 
-from services.dns import DnsService
-from services.docker import DockerService
+from repositories.file_system_zone_repository import FileSystemZoneRepository
+from services.dns_service import DnsService
+from services.docker_service import DockerService
 
 
 def mgetenv(name: str) -> str:
@@ -21,6 +22,8 @@ class Application:
 
     __sleep_on_success: int
     __sleep_on_error: int
+
+    __zone_repository: FileSystemZoneRepository
     __docker_service: DockerService
     __dns_service: DnsService
 
@@ -46,12 +49,17 @@ class Application:
 
     def _setup(self) -> None:
         """Setup the application"""
+
         self._setup_logging()
+
         self.__sleep_on_success = int(mgetenv("SLEEP_ON_SUCCESS"))
         self.__sleep_on_error = int(mgetenv("SLEEP_ON_ERROR"))
+
+        zones_dir = Path(mgetenv("DNS_ZONE_FILES_DIR"))
+        self.__zone_repository = FileSystemZoneRepository(zones_dir=zones_dir)
         self.__docker_service = DockerService()
         self.__dns_service = DnsService(
-            zone_files_dir=Path(mgetenv("DNS_ZONE_FILES_DIR")),
+            zone_repository=self.__zone_repository,
             dns_ipv4=mgetenv("DNS_IP"),
             ttl=int(mgetenv("DNS_TTL")),
         )
@@ -70,7 +78,7 @@ class Application:
                 zone.get_path().name,
                 zone.to_text(want_origin=True),
             )
-            # zone.to_file()
+            self.__zone_repository.save_zone(zone)
 
     def run(self) -> None:
         """App entry point, in charge of setting up the app and starting the loop"""

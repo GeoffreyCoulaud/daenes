@@ -1,82 +1,38 @@
 from functools import partial
 from itertools import groupby
 import logging
-from pathlib import Path
-from typing import Any, Generator, Iterable, Protocol
+from typing import Generator, Iterable
 
-import dns
-from dns.zone import Zone, from_file as zone_from_file
-from dns.rdataclass import IN, RdataClass
-from dns.name import Name, from_text as name_from_text
+from dns.zone import Zone
+from dns.rdataclass import IN
+from dns.name import from_text as name_from_text
 from dns.rdtypes.ANY.SOA import SOA
 from dns.rdtypes.ANY.NS import NS
 from dns.rdtypes.IN.A import A
 from dns import rdatatype
 
+from models.file_system_zone import Zone, ZoneFactory
 from models.local_domain import LocalDomain
+from repositories.zone_repository import ZoneRepository
 
 
 class InvalidSubdomainError(Exception):
     """Raised when a subdomain is not a valid subdomain of a domain"""
 
 
-class ZoneFactory(Protocol):
-
-    def __call__(
-        self,
-        origin: Name | str | None,
-        rdclass: RdataClass = dns.rdataclass.IN,
-    ) -> Zone: ...
-
-
-class FileSystemZone(Zone):
-
-    __path: Path
-
-    def __init__(
-        self,
-        path: Path,
-        origin: Name | str | None,
-        rdclass: RdataClass = dns.rdataclass.IN,
-        relativize: bool = True,
-    ) -> None:
-        super().__init__(origin, rdclass, relativize)
-        self.__path = path
-
-    def get_path(self) -> Path:
-        """Get the path of the zone file"""
-        return self.__path
-
-    def to_file(
-        self,
-        f: Any = None,
-        sorted: bool = True,
-        relativize: bool = True,
-        nl: str | None = None,
-        want_comments: bool = True,
-        want_origin: bool = True,
-    ) -> None:
-        # Only use the override if provided
-        f = f if f is not None else str(self.__path)
-        # Write to disk
-        return super().to_file(
-            f=f,
-            sorted=sorted,
-            relativize=relativize,
-            nl=nl,
-            want_comments=want_comments,
-            want_origin=want_origin,
-        )
-
-
 class DnsService:
 
-    __zone_files_dir: Path
+    __zone_repository: ZoneRepository
     __dns_ip: str
     __ttl: int
 
-    def __init__(self, zone_files_dir: Path, dns_ipv4: str, ttl: int = 3600):
-        self.__zone_files_dir = zone_files_dir
+    def __init__(
+        self,
+        zone_repository: ZoneRepository,
+        dns_ipv4: str,
+        ttl: int = 3600,
+    ):
+        self.__zone_repository = zone_repository
         self.__dns_ip = dns_ipv4
         self.__ttl = ttl
 
@@ -137,17 +93,15 @@ class DnsService:
 
     def make_updated_zones(
         self, domains: Iterable[LocalDomain]
-    ) -> Generator[FileSystemZone, None, None]:
+    ) -> Generator[Zone, None, None]:
         for parent, domains in groupby(domains, lambda d: d.parent):
-            path = self.__zone_files_dir / f"{parent}.zone"
-            try:
-                previous_zone = zone_from_file(str(path))
-            except Exception:
-                logging.warning("Could not find existing zone at %s", str(path))
-                previous_zone = None
+            previous_zone = self.__zone_repository.find_zone(parent)
             yield self._make_zone(
                 parent=parent,
                 domains=domains,
                 previous_zone=previous_zone,
-                zone_factory=partial(FileSystemZone, path=path),
+                zone_factory=partial(
+                    self.__zone_repository.create_zone,
+                    parent=parent,
+                ),
             )
