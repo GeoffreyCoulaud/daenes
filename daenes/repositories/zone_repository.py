@@ -2,7 +2,7 @@ from abc import ABC
 
 from dns.zone import Zone
 
-from models.file_system_zone import ZoneFactoryKwargs
+from daenes.models.file_system_zone import ZoneFactoryKwargs
 
 
 class ZoneRepository(ABC):

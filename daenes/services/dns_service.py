@@ -11,9 +11,9 @@ from dns.rdtypes.ANY.NS import NS
 from dns.rdtypes.IN.A import A
 from dns import rdatatype
 
-from models.file_system_zone import ZoneFactory
-from models.local_domain import LocalDomain
-from repositories.zone_repository import ZoneRepository
+from daenes.models.file_system_zone import ZoneFactory
+from daenes.models.local_domain import LocalDomain
+from daenes.repositories.zone_repository import ZoneRepository
 
 
 class InvalidSubdomainError(Exception):

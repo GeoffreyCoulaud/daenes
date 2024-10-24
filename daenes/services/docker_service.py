@@ -5,7 +5,7 @@ from docker.client import DockerClient  # pylint: disable=import-error
 from docker.models.containers import Container  # pylint: disable=import-error
 from docker.models.networks import Network  # pylint: disable=import-error
 
-from models.local_domain import LocalDomain
+from daenes.models.local_domain import LocalDomain
 
 
 class MissingNetworkDomainLabel(Exception):

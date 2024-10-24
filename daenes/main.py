@@ -5,9 +5,9 @@ import sys
 from os import getenv
 from time import sleep
 
-from repositories.file_system_zone_repository import FileSystemZoneRepository
-from services.dns_service import DnsService
-from services.docker_service import DockerService
+from daenes.repositories.file_system_zone_repository import FileSystemZoneRepository
+from daenes.services.dns_service import DnsService
+from daenes.services.docker_service import DockerService
 
 
 def mgetenv(name: str) -> str:

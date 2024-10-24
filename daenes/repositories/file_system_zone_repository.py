@@ -3,8 +3,8 @@ from pathlib import Path
 
 from dns.zone import Zone, from_file as zone_from_file
 
-from repositories.zone_repository import ZoneRepository
-from models.file_system_zone import FileSystemZone, ZoneFactoryKwargs
+from daenes.repositories.zone_repository import ZoneRepository
+from daenes.models.file_system_zone import FileSystemZone, ZoneFactoryKwargs
 
 
 class FileSystemZoneRepository(ZoneRepository):
