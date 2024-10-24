@@ -1,6 +1,6 @@
 # Daenes
 
-A simple local-DNS from docker labels solution.  
+A simple solution for local DNS from docker labels.  
 Watches docker containers for specific labels and sets entries for local DNS server accordingly, like traefik does for proxying.
 
 ## Installation
