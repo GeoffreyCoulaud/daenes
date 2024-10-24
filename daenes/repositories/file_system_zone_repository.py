@@ -20,7 +20,7 @@ class FileSystemZoneRepository(ZoneRepository):
     def find_zone(self, parent: str) -> None | Zone:
         try:
             return zone_from_file(self._get_zone_path(parent))
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             return None
 
     def create_zone(

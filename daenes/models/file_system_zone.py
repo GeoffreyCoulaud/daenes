@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Protocol, TypedDict
+from typing import Protocol, TypedDict
 
 import dns
 from dns.zone import Zone

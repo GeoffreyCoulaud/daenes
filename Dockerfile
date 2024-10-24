@@ -6,8 +6,8 @@ RUN pip install -r /tmp/requirements.txt
 RUN rm /tmp/requirements.txt
 
 # Install app
-COPY src /src
-WORKDIR /src
+COPY daenes /daenes
+WORKDIR /daenes
 
 # Volumes
 VOLUME /var/run/docker.sock

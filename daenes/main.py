@@ -53,7 +53,6 @@ class Application:
         self._setup_logging()
 
         self.__sleep_on_success = int(mgetenv("SLEEP_ON_SUCCESS"))
-        self.__sleep_on_error = int(mgetenv("SLEEP_ON_ERROR"))
 
         zones_dir = Path(mgetenv("DNS_ZONE_FILES_DIR"))
         self.__zone_repository = FileSystemZoneRepository(zones_dir=zones_dir)
@@ -84,7 +83,6 @@ class Application:
         """App entry point, in charge of setting up the app and starting the loop"""
         self._setup()
         while True:
-            # TODO error handling
             self._loop()
             sleep(self.__sleep_on_success)
 

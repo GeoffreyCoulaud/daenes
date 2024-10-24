@@ -11,7 +11,7 @@ from dns.rdtypes.ANY.NS import NS
 from dns.rdtypes.IN.A import A
 from dns import rdatatype
 
-from models.file_system_zone import Zone, ZoneFactory
+from models.file_system_zone import ZoneFactory
 from models.local_domain import LocalDomain
 from repositories.zone_repository import ZoneRepository
 
@@ -43,6 +43,7 @@ class DnsService:
         previous_zone: Zone | None,
         zone_factory: ZoneFactory = Zone,
     ) -> Zone:
+        # pylint: disable=too-many-locals
 
         serial = 1 + (-1 if previous_zone is None else previous_zone.get_soa().serial)
         zone_name = name_from_text(f"{parent}.")
@@ -94,11 +95,11 @@ class DnsService:
     def make_updated_zones(
         self, domains: Iterable[LocalDomain]
     ) -> Generator[Zone, None, None]:
-        for parent, domains in groupby(domains, lambda d: d.parent):
+        for parent, siblings in groupby(domains, lambda d: d.parent):
             previous_zone = self.__zone_repository.find_zone(parent)
             yield self._make_zone(
                 parent=parent,
-                domains=domains,
+                domains=siblings,
                 previous_zone=previous_zone,
                 zone_factory=partial(
                     self.__zone_repository.create_zone,

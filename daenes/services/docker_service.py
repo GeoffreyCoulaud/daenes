@@ -1,8 +1,9 @@
 import logging
 from typing import Generator
-from docker.client import DockerClient
-from docker.models.containers import Container
-from docker.models.networks import Network
+
+from docker.client import DockerClient  # pylint: disable=import-error
+from docker.models.containers import Container  # pylint: disable=import-error
+from docker.models.networks import Network  # pylint: disable=import-error
 
 from models.local_domain import LocalDomain
 
@@ -72,10 +73,10 @@ class DockerService:
         try:
             # Get the domain label from the network's attrs property
             return network.attrs["Labels"][self.__network_domain_label]
-        except KeyError:
+        except KeyError as error:
             raise MissingNetworkDomainLabel(
                 f"Network {network.name} is missing the domain label"
-            )
+            ) from error
 
     def _get_container_ipv4_on_network(
         self,
