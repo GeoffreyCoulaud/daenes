@@ -20,8 +20,7 @@ def mgetenv(name: str) -> str:
 
 class Application:
 
-    __sleep_on_success: int
-    __sleep_on_error: int
+    __interval: int
 
     __zone_repository: FileSystemZoneRepository
     __docker_service: DockerService
@@ -52,9 +51,9 @@ class Application:
 
         self._setup_logging()
 
-        self.__sleep_on_success = int(mgetenv("SLEEP_ON_SUCCESS"))
+        self.__interval = int(mgetenv("INTERVAL"))
 
-        zones_dir = Path(mgetenv("DNS_ZONE_FILES_DIR"))
+        zones_dir = Path("/zones")
         self.__zone_repository = FileSystemZoneRepository(zones_dir=zones_dir)
         self.__docker_service = DockerService()
         self.__dns_service = DnsService(
@@ -84,7 +83,7 @@ class Application:
         self._setup()
         while True:
             self._loop()
-            sleep(self.__sleep_on_success)
+            sleep(self.__interval)
 
 
 if __name__ == "__main__":

@@ -44,14 +44,24 @@ class DockerService:
         """
         if not self.__client:
             self._create_client()
-        return self.__client.networks.list(
-            filters={
-                "label": [
-                    f"{self.__network_enabled_label}=true",
-                    self.__network_domain_label,
-                ]
-            },
-        )
+
+        networks_by_id = {}
+
+        # Get all the networks with the enabled label
+        for network in self.__client.networks.list(
+            filters={"label": f"{self.__network_enabled_label}=true"}
+        ):
+            networks_by_id[network.id] = network
+
+        # Get all the networks with the domain label
+        # If a network has both labels, it will be added to the list only once
+        # The renamed value takes precedence
+        for network in self.__client.networks.list(
+            filters={"label": self.__network_domain_label}
+        ):
+            networks_by_id[network.id] = network
+
+        return list(networks_by_id.values())
 
     def _is_container_enabled(self, container: Container) -> bool:
         return (
@@ -72,7 +82,8 @@ class DockerService:
     def _get_network_domain(self, network: Network) -> str:
         try:
             # Get the domain label from the network's attrs property
-            return network.attrs["Labels"][self.__network_domain_label]
+            raw_domain: str = network.attrs["Labels"][self.__network_domain_label]
+            return raw_domain if "." in raw_domain else f"{raw_domain}.local"
         except KeyError as error:
             raise MissingNetworkDomainLabel(
                 f"Network {network.name} is missing the domain label"
