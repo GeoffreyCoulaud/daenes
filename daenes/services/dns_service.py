@@ -9,6 +9,7 @@ from dns.name import from_text as name_from_text
 from dns.rdtypes.ANY.SOA import SOA
 from dns.rdtypes.ANY.NS import NS
 from dns.rdtypes.IN.A import A
+from dns.rdtypes.IN.AAAA import AAAA
 from dns import rdatatype
 
 from daenes.models.file_system_zone import ZoneFactory
@@ -84,9 +85,14 @@ class DnsService:
             logging.debug("Including %s subdomain in %s zone", domain.domain, parent)
             domain_name = name_from_text(f"{domain.domain}.{parent}.")
             zone_domain_node = zone.find_node(domain_name, create=True)
-            # A record
-            a_rdata = A(IN, rdatatype.A, domain.ipv4)
-            a_rdataset = zone_domain_node.find_rdataset(IN, rdatatype.A, create=True)
+            # A / AAAA record
+            if ":" in domain.ip:
+                a_rdatatype = rdatatype.AAAA
+                a_rdata = AAAA(IN, rdatatype.AAAA, domain.ip)
+            else:
+                a_rdatatype = rdatatype.A
+                a_rdata = A(IN, rdatatype.A, domain.ip)
+            a_rdataset = zone_domain_node.find_rdataset(IN, a_rdatatype, create=True)
             a_rdataset.update_ttl(self.__ttl)
             a_rdataset.add(a_rdata)
 

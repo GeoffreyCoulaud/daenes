@@ -1,15 +1,12 @@
 networks:
-  # Network that should not be considered
+  
   some-basic-network:
 
-  # Network that should be considered
   services:
     labels:
       - daenes.enabled=true
       - daenes.domain=services.internal
   
-  # Another network that should be considered
-  # Its domain should be admin-services.internal
   admin-services:
     labels:
       - daenes.enabled=true
@@ -39,14 +36,10 @@ services:
     networks:
       - some-basic-network
     labels:
-      # This service should not be considered, even if it has the label
-      # because it is not in a network that has the label
       - daenes.enabled=true
 
-  # Some service that should be considered, on the public network
-  # Should generate a DNS entry for web.services.internal
   web2:
-    container_name: web2
+    container_name: included-simple
     image: httpd:latest
     ports:
       - "8282:80"
@@ -55,10 +48,8 @@ services:
     networks:
       - services
 
-  # Some service that should be considered, on the public network
-  # Should generate a DNS entry for web2.services.internal
   web3:
-    container_name: ZSJKHDUIQKJSHDsqjs
+    container_name: should-be-renamed-by-label
     image: httpd:latest
     ports:
       - "8383:80"
@@ -67,9 +58,7 @@ services:
     networks:
       - services
     labels:
-      - daenes.domain=web3
-
-  # Some service that shouldn't be considered, even if it is on the public network
+      - daenes.domain=included-renamed-by-label
   web4:
     container_name: INVISIBLE-EXPLICITLY-DISABLED
     image: httpd:latest
@@ -82,15 +71,26 @@ services:
     labels:
       - daenes.enabled=false
 
-  # Some service that should be considered on both networks
-  # Should generate a DNS entry for web3.services.internal and web3.admin-services.internal
   web5:
-    container_name: web5
+    container_name: included-multiple-networks
     image: httpd:latest
     ports:
       - "8585:80"
     volumes:
       - ./sample-website:/usr/local/apache2/htdocs
     networks:
+      services:
+        aliases:
+          - included-multiple-networks-alias
+      admin-services:
+
+  web6:
+    container_name: should-be-renamed-by-hostname
+    hostname: included-renamed-by-hostname
+    image: httpd:latest
+    ports:
+      - "8686:80"
+    volumes:
+      - ./sample-website:/usr/local/apache2/htdocs
+    networks:
       - services
-      - admin-services

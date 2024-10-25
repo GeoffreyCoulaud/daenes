@@ -6,7 +6,7 @@ import json
 class LocalDomain:
     parent: str
     domain: str
-    ipv4: str
+    ip: str
 
     def to_json(self):
         return json.dumps(self, default=lambda o: o.__dict__)

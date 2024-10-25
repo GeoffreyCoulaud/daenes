@@ -66,7 +66,7 @@ class DockerService:
     def _is_container_enabled(self, container: Container) -> bool:
         return (
             self.__container_enabled_label not in container.labels
-            or container.labels[self.__container_enabled_label] == "true"
+            or container.labels.get(self.__container_enabled_label, "true") == "true"
         )
 
     def _get_enabled_containers_on_network(self, network: Network) -> list[Container]:
@@ -77,7 +77,7 @@ class DockerService:
         ]
 
     def _get_container_domain(self, container: Container) -> str:
-        return container.labels.get(self.__container_domain_label, container.name)
+        return container.labels(self.__container_domain_label, container.name)
 
     def _get_network_domain(self, network: Network) -> str:
         try:
@@ -89,13 +89,26 @@ class DockerService:
                 f"Network {network.name} is missing the domain label"
             ) from error
 
-    def _get_container_ipv4_on_network(
+    def _get_container_ip_on_network(
         self,
         container: Container,
         network: Network,
     ) -> str:
         container.reload()
         return container.attrs["NetworkSettings"]["Networks"][network.name]["IPAddress"]
+
+    def _get_container_aliases_on_network(
+        self,
+        container: Container,
+        network: Network,
+    ) -> list[str]:
+        container.reload()
+        try:
+            # fmt: off
+            return container.attrs["NetworkSettings"]["Networks"][network.name]["Aliases"]
+            # fmt: on
+        except KeyError:
+            return []
 
     def get_local_domains(self) -> Generator[LocalDomain, None, None]:
         """Get all the local domains from the docker API from a generator"""
@@ -111,21 +124,20 @@ class DockerService:
 
                 # Obtain container info
                 container.reload()
-                container_domain = self._get_container_domain(container)
-                ipv4 = self._get_container_ipv4_on_network(container, network)
+                ip = self._get_container_ip_on_network(container, network)
+                main_domain = self._get_container_domain(container)
+                aliases = self._get_container_aliases_on_network(container, network)
+                logging.debug("Container has main domain %s", main_domain)
+                logging.debug("Container has aliases %s", aliases)
+                domains = [main_domain, *aliases]
 
-                # Build local domain
-                logging.debug(
-                    "Container %s (%s) on network %s has subdomain %s and ipv4 %s",
-                    container.name,
-                    container.id,
-                    network.name,
-                    container_domain,
-                    ipv4,
-                )
+                for domain in domains:
 
-                yield LocalDomain(
-                    parent=network_domain,
-                    domain=container_domain,
-                    ipv4=ipv4,
-                )
+                    # Build local domain
+                    logging.debug("Container has subdomain %s and ipv4 %s", domain, ip)
+
+                    yield LocalDomain(
+                        parent=network_domain,
+                        domain=domain,
+                        ip=ip,
+                    )
