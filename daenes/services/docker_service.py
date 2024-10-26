@@ -111,7 +111,7 @@ class DockerService:
         return domain
 
     def _get_network_domain_from_label(self, network: Network) -> str | None:
-        labels = network.attrs.get("Labels", dict())
+        labels = network.attrs.get("Labels", {})
         return labels.get(self.__network_domain_label)
 
     def _get_network_domain_from_name(self, network: Network) -> str | None:
