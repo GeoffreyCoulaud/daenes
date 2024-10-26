@@ -21,6 +21,10 @@ class InvalidSubdomainError(Exception):
     """Raised when a subdomain is not a valid subdomain of a domain"""
 
 
+class DuplicateSubdomainError(Exception):
+    """Raised when a subdomain is already present in a domain"""
+
+
 class DnsService:
 
     __zone_repository: ZoneRepository
@@ -76,15 +80,24 @@ class DnsService:
 
         # Add an additional NS subdomain
         domains_including_ns = list(domains)
-        for domain in [d for d in domains if d == "ns"]:
+        for domain in [d for d in domains if d.domain == "ns"]:
             raise InvalidSubdomainError("Cannot have a subdomain named 'ns'")
         domains_including_ns.append(LocalDomain(parent, "ns", self.__dns_ip))
 
         # Data for other subdomains
+        seen_domains = set[str]()
         for domain in domains_including_ns:
+
+            # Ensure no conflicting subdomains
+            if domain.domain in seen_domains:
+                msg = f"Duplicate subdomain {domain} in {parent}"
+                raise DuplicateSubdomainError(msg)
+            seen_domains.add(domain.domain)
+
             logging.debug("Including %s subdomain in %s zone", domain.domain, parent)
             domain_name = name_from_text(f"{domain.domain}.{parent}.")
             zone_domain_node = zone.find_node(domain_name, create=True)
+
             # A / AAAA record
             if ":" in domain.ip:
                 a_rdatatype = rdatatype.AAAA

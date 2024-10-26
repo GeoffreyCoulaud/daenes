@@ -72,7 +72,7 @@ class Application:
         logging.debug("Local DNS zones")
         for zone in zones:
             logging.debug(
-                "%s:\n%s",
+                "%s:\n---\n%s\n---",
                 zone.get_path().name,
                 zone.to_text(want_origin=True),
             )

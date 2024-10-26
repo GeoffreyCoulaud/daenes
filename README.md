@@ -182,8 +182,10 @@ On a given docker network, daenes will assign one or more domain names following
 Base subdomain:
 - If the `daenes.domain` label is set, it is used as the subdomain
 - Else the container name is used (different from the service name)
+- Finally, if none of these are found, the container hostname is used
 
 Secondary subdomains:
+- The container name and service name are aliases on all networks, by default
 - If the container has aliases on the network, they are used for secondary subdomains
 
 Finally, the subdomains are attached to the network's domain.

@@ -1,0 +1,47 @@
+networks:
+
+  # This network is watched because it matches **at least** one of the conditions
+  # - It has daenes.enabled=true
+  # - It has a daenes domain explicitly set 
+  services:
+    labels:
+      - daenes.enabled=true
+      - daenes.domain=mysuperservices.internal
+  
+  # This network is also watched
+  admin-services:
+    labels:
+      - daenes.enabled=true
+
+  # This network is not watched
+  some-internal-network:
+
+services:
+
+  daenes:
+    image: ghcr.io/geoffreycoulaud/daenes:latest
+    volumes:
+      # The docker socket is needed to discover networks and containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Directory where the zone files will be written
+      - ./zones:/zones
+    environment:
+      # Change this IP at your discretion
+      - DNS_IP=0.0.0.0
+
+  # This container will generate a zone entry at web.services.internal
+  # and web.admin-services.internal
+  httpd:
+    container_name: www
+    image: httpd:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ../sample-website:/usr/local/apache2/htdocs
+    networks:
+      # The domain name is generated because the container is on the
+      # services network, which is watched by daenes.
+      services:
+      # Same thing here, to show that a container may have multiple domains
+      # all pointing at its correct IP on the appropriate network
+      admin-services:
