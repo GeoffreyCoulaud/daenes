@@ -1,7 +1,6 @@
 from functools import partial
 from itertools import groupby
 import logging
-from typing import Generator, Iterable
 
 from dns.zone import Zone
 from dns.rdataclass import IN
@@ -44,7 +43,7 @@ class DnsService:
     def _make_zone(
         self,
         parent: str,
-        domains: Iterable[LocalDomain],
+        domains: list[LocalDomain],
         previous_zone: Zone | None,
         zone_factory: ZoneFactory = Zone,
     ) -> Zone:
@@ -88,10 +87,11 @@ class DnsService:
         seen_domains = set[str]()
         for domain in domains_including_ns:
 
-            # Ensure no conflicting subdomains
+            # Ensure no conflicting subdomains (should not happen, but just in case)
             if domain.domain in seen_domains:
-                msg = f"Duplicate subdomain {domain} in {parent}"
-                raise DuplicateSubdomainError(msg)
+                raise DuplicateSubdomainError(
+                    f"Duplicate subdomain in {parent} : {domain.domain}"
+                )
             seen_domains.add(domain.domain)
 
             logging.debug("Including %s subdomain in %s zone", domain.domain, parent)
@@ -111,17 +111,22 @@ class DnsService:
 
         return zone
 
-    def make_updated_zones(
-        self, domains: Iterable[LocalDomain]
-    ) -> Generator[Zone, None, None]:
+    def make_updated_zones(self, domains: list[LocalDomain]) -> list[Zone]:
+        zones = []
         for parent, siblings in groupby(domains, lambda d: d.parent):
             previous_zone = self.__zone_repository.find_zone(parent)
-            yield self._make_zone(
+            if previous_zone is not None:
+                logging.debug("Found previous zone for %s", parent)
+            else:
+                logging.debug("No previous zone for %s", parent)
+            zone = self._make_zone(
                 parent=parent,
-                domains=siblings,
+                domains=list(siblings),
                 previous_zone=previous_zone,
                 zone_factory=partial(
                     self.__zone_repository.create_zone,
                     parent=parent,
                 ),
             )
+            zones.append(zone)
+        return zones

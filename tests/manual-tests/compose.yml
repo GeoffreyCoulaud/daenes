@@ -16,8 +16,7 @@ services:
 
   daenes:
     build:
-      context: ../
-      dockerfile: Dockerfile
+      context: ../../
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./zones:/zones
@@ -25,7 +24,6 @@ services:
       - INTERVAL=30
       - DNS_IP=0.0.0.0
 
-  # Some service that should not be considered
   web1:
     container_name: INVISIBLE-OUT-OF-NETWORK
     image: httpd:latest
@@ -71,7 +69,7 @@ services:
     labels:
       - daenes.enabled=false
 
-  web5:
+  includes-multiple-networks-service-alias:
     container_name: included-multiple-networks
     image: httpd:latest
     ports:
@@ -79,13 +77,12 @@ services:
     volumes:
       - ./sample-website:/usr/local/apache2/htdocs
     networks:
+      admin-services:
       services:
         aliases:
           - included-multiple-networks-alias
-      admin-services:
 
   web6:
-    container_name: should-be-renamed-by-hostname
     hostname: included-renamed-by-hostname
     image: httpd:latest
     ports:

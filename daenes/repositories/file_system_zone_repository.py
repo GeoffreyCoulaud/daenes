@@ -18,9 +18,15 @@ class FileSystemZoneRepository(ZoneRepository):
         return self.__zones_dir / f"{parent}.zone"
 
     def find_zone(self, parent: str) -> None | Zone:
+        zone_path_str = str(self._get_zone_path(parent))
+        logging.debug("Trying to read zone file %s", self._get_zone_path(parent))
         try:
-            return zone_from_file(self._get_zone_path(parent))
-        except Exception:  # pylint: disable=broad-exception-caught
+            return zone_from_file(zone_path_str)
+        except FileNotFoundError:
+            logging.warning("Zone file %s not found", zone_path_str)
+            return None
+        except Exception as error:  # pylint: disable=broad-exception-caught
+            logging.error("Error reading zone file %s", zone_path_str, exc_info=error)
             return None
 
     def create_zone(

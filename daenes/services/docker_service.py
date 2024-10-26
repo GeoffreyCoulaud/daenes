@@ -1,5 +1,4 @@
 import logging
-from typing import Generator
 
 from docker.client import DockerClient  # pylint: disable=import-error
 from docker.models.containers import Container  # pylint: disable=import-error
@@ -112,8 +111,8 @@ class DockerService:
         return domain
 
     def _get_network_domain_from_label(self, network: Network) -> str | None:
-        logging.debug("Labels: %s", network.attrs.get("Labels", dict()))
-        return network.attrs.get("Labels", dict()).get(self.__network_domain_label)
+        labels = network.attrs.get("Labels", dict())
+        return labels.get(self.__network_domain_label)
 
     def _get_network_domain_from_name(self, network: Network) -> str | None:
         return network.name
@@ -153,8 +152,10 @@ class DockerService:
         except KeyError:
             return []
 
-    def get_local_domains(self) -> Generator[LocalDomain, None, None]:
+    def get_local_domains(self) -> list[LocalDomain]:
         """Get all the local domains from the docker API from a generator"""
+
+        local_domains = []
 
         for network in self._get_enabled_networks():
 
@@ -172,15 +173,22 @@ class DockerService:
                 aliases = self._get_container_aliases_on_network(container, network)
                 logging.debug("Container has main domain %s", main_domain)
                 logging.debug("Container has aliases %s", aliases)
-                domains = [main_domain, *aliases]
+
+                # Deduplicate domains
+                domains = set[str]()
+                domains.add(main_domain)
+                domains.update(aliases)
 
                 for domain in domains:
 
                     # Build local domain
                     logging.debug("Container has subdomain %s and ipv4 %s", domain, ip)
 
-                    yield LocalDomain(
+                    local_domain = LocalDomain(
                         parent=network_domain,
                         domain=domain,
                         ip=ip,
                     )
+                    local_domains.append(local_domain)
+
+        return local_domains

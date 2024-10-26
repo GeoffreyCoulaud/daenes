@@ -68,7 +68,7 @@ class Application:
         logging.debug("Local domains from docker")
         for domain in domains:
             logging.debug("%s", domain.to_json())
-        zones = list(self.__dns_service.make_updated_zones(domains))
+        zones = self.__dns_service.make_updated_zones(domains)
         logging.debug("Local DNS zones")
         for zone in zones:
             logging.debug(
