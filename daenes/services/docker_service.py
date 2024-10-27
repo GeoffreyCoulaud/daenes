@@ -136,7 +136,6 @@ class DockerService:
         container: Container,
         network: Network,
     ) -> str:
-        container.reload()
         return container.attrs["NetworkSettings"]["Networks"][network.name]["IPAddress"]
 
     def _get_container_aliases_on_network(
@@ -144,7 +143,6 @@ class DockerService:
         container: Container,
         network: Network,
     ) -> list[str]:
-        container.reload()
         try:
             # fmt: off
             return container.attrs["NetworkSettings"]["Networks"][network.name]["Aliases"]
@@ -153,7 +151,7 @@ class DockerService:
             return []
 
     def get_local_domains(self) -> list[LocalDomain]:
-        """Get all the local domains from the docker API from a generator"""
+        """Get all the local domains from the docker API"""
 
         local_domains = []
 
@@ -170,25 +168,20 @@ class DockerService:
                 container.reload()
                 ip = self._get_container_ip_on_network(container, network)
                 main_domain = self._get_container_domain(container)
-                aliases = self._get_container_aliases_on_network(container, network)
                 logging.debug("Container has main domain %s", main_domain)
+                aliases = self._get_container_aliases_on_network(container, network)
+                aliases = set(aliases)
+                if main_domain in aliases:
+                    aliases.remove(main_domain)
                 logging.debug("Container has aliases %s", aliases)
 
-                # Deduplicate domains
-                domains = set[str]()
-                domains.add(main_domain)
-                domains.update(aliases)
-
-                for domain in domains:
-
-                    # Build local domain
-                    logging.debug("Container has subdomain %s and ipv4 %s", domain, ip)
-
-                    local_domain = LocalDomain(
-                        parent=network_domain,
-                        domain=domain,
-                        ip=ip,
-                    )
-                    local_domains.append(local_domain)
+                # Build local domain
+                local_domain = LocalDomain(
+                    parent=network_domain,
+                    name=main_domain,
+                    aliases=aliases,
+                    ip=ip,
+                )
+                local_domains.append(local_domain)
 
         return local_domains

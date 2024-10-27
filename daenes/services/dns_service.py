@@ -9,6 +9,7 @@ from dns.rdtypes.ANY.SOA import SOA
 from dns.rdtypes.ANY.NS import NS
 from dns.rdtypes.IN.A import A
 from dns.rdtypes.IN.AAAA import AAAA
+from dns.rdtypes.ANY.CNAME import CNAME
 from dns import rdatatype
 
 from daenes.models.file_system_zone import ZoneFactory
@@ -78,25 +79,25 @@ class DnsService:
         parent_ns_rdataset.add(parent_ns_rdata)
 
         # Add an additional NS subdomain
-        domains_including_ns = list(domains)
-        for domain in [d for d in domains if d.domain == "ns"]:
-            raise InvalidSubdomainError("Cannot have a subdomain named 'ns'")
-        domains_including_ns.append(LocalDomain(parent, "ns", self.__dns_ip))
+        domains_including_ns = [
+            *domains,
+            LocalDomain(parent=parent, name="ns", ip=self.__dns_ip),
+        ]
 
         # Data for other subdomains
-        seen_domains = set[str]()
+        seen_names = set[str]()
         for domain in domains_including_ns:
 
             # Ensure no conflicting subdomains (should not happen, but just in case)
-            if domain.domain in seen_domains:
-                raise DuplicateSubdomainError(
-                    f"Duplicate subdomain in {parent} : {domain.domain}"
-                )
-            seen_domains.add(domain.domain)
+            for name in [domain.name, *domain.aliases]:
+                if name in seen_names:
+                    msg = f"Duplicate subdomain in {parent}: {name}"
+                    raise DuplicateSubdomainError(msg)
+                seen_names.add(name)
 
-            logging.debug("Including %s subdomain in %s zone", domain.domain, parent)
-            domain_name = name_from_text(f"{domain.domain}.{parent}.")
-            zone_domain_node = zone.find_node(domain_name, create=True)
+            logging.debug("Including %s subdomain in %s zone", domain.name, parent)
+            domain_name = name_from_text(f"{domain.name}.{parent}.")
+            domain_node = zone.find_node(domain_name, create=True)
 
             # A / AAAA record
             if ":" in domain.ip:
@@ -105,9 +106,21 @@ class DnsService:
             else:
                 a_rdatatype = rdatatype.A
                 a_rdata = A(IN, rdatatype.A, domain.ip)
-            a_rdataset = zone_domain_node.find_rdataset(IN, a_rdatatype, create=True)
+            a_rdataset = domain_node.find_rdataset(IN, a_rdatatype, create=True)
             a_rdataset.update_ttl(self.__ttl)
             a_rdataset.add(a_rdata)
+
+            # CNAME for aliases
+            for alias in domain.aliases:
+                logging.debug("Including alias %s in %s zone", alias, parent)
+                alias_name = name_from_text(f"{alias}.{parent}.")
+                alias_node = zone.find_node(name=alias_name, create=True)
+                cname_rdata = CNAME(IN, rdatatype.CNAME, domain_name)
+                cname_rdataset = alias_node.find_rdataset(
+                    IN, rdatatype.CNAME, create=True
+                )
+                cname_rdataset.update_ttl(self.__ttl)
+                cname_rdataset.add(cname_rdata)
 
         return zone
 

@@ -74,7 +74,7 @@ class Application:
             logging.debug(
                 "%s:\n---\n%s\n---",
                 zone.get_path().name,
-                zone.to_text(want_origin=True),
+                zone.to_text(sorted=False, want_origin=True, want_comments=True),
             )
             self.__zone_repository.save_zone(zone)
 
