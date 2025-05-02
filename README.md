@@ -65,7 +65,7 @@ See the [example docker compose](#example-docker-compose) section for more infor
         <ul>
           <li>Containers are included if on an included network</li>
           <li>Containers are included by default, even with no <code>daenes.*</code> label</li>
-          <li>Containers can be excluded explicitly from using this label</li>
+          <li>Containers can be excluded explicitly by using this label</li>
         </ul>
       </td>
     </tr>
