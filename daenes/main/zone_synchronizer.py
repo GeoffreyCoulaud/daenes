@@ -2,7 +2,13 @@ import logging
 from collections import Counter
 from collections.abc import Iterator
 
-from .dns_names import MAX_NAME_LENGTH, is_valid_name, normalize
+from .dns_names import (
+    APEX,
+    MAX_NAME_LENGTH,
+    is_valid_name,
+    make_relative,
+    normalize,
+)
 from .model import AddressRecord, Allowances, IpAddress, LocalDomain, Zone
 from .ports import NetworkSource, ZoneStore
 
@@ -129,7 +135,7 @@ class ZoneSynchronizer:
         }
         # Who answers on each name, to say so when one is dropped over them.
         containers: dict[str, set[str]] = {}
-        for domain in sorted(domains, key=lambda domain: domain.name):
+        for domain in sorted(domains, key=lambda domain: domain.container):
             for name in self._get_names(origin, domain):
                 addresses.setdefault(name, set()).update(domain.addresses)
                 containers.setdefault(name, set()).add(domain.container)
@@ -144,41 +150,50 @@ class ZoneSynchronizer:
         )
 
     def _get_names(self, origin: str, domain: LocalDomain) -> Iterator[str]:
-        """Every name one container answers to, its own and its aliases.
+        """Every name one container answers to, as this zone writes it.
 
-        Each stands on its own, so a container whose name cannot be served is
-        still reached through the aliases that can.
+        Each stands on its own, so a container holding a name no host may bear
+        is still reached through the ones that can.
         """
-        for label in [domain.name, *sorted(domain.aliases)]:
-            name = self._make_name(origin, label)
+        for label in sorted(domain.names):
+            name = self._make_name(origin, label, domain.container)
             if name is not None:
                 yield name
 
     @staticmethod
-    def _make_name(origin: str, label: str) -> str | None:
+    def _make_name(origin: str, label: str, container: str) -> str | None:
         """The name to write for a container, or None to leave it out."""
-        name = normalize(label)
-        if not is_valid_name(name):
+        # Checked whole, before being cut down: an empty name would otherwise
+        # come out of the cut looking like the zone's own.
+        if not is_valid_name(normalize(label)):
             logging.warning(
-                "Ignoring the name %r of zone %s: not a valid domain name, "
-                "rename that container or give it a network alias",
+                "Ignoring the name %r of container %s: a name is made of "
+                "labels of letters, digits and hyphens",
                 label,
-                origin,
+                container,
             )
             return None
+        name = make_relative(normalize(label), origin)
+        # A container answering for the zone's own name, which is a deployment
+        # saying that this one is what the domain is for.
+        if name == APEX:
+            return name
         if len(name) + len(".") + len(origin) > MAX_NAME_LENGTH:
             logging.warning(
-                "Ignoring the name %r of zone %s: longer than %d characters "
-                "once in the zone",
+                "Ignoring the name %r of container %s: longer than %d "
+                "characters once in zone %s",
                 label,
-                origin,
+                container,
                 MAX_NAME_LENGTH,
+                origin,
             )
             return None
         if name == NAMESERVER_NAME:
             logging.warning(
-                "Ignoring the name %r of zone %s: it is the zone's nameserver",
+                "Ignoring the name %r of container %s: it is zone %s's own "
+                "nameserver",
                 label,
+                container,
                 origin,
             )
             return None

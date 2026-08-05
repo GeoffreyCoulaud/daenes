@@ -11,6 +11,21 @@ MAX_NAME_LENGTH = 253
 # a leading digit allowed. Names are lowercased before being matched.
 _LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 
+# The zone's own name, which is what is left of a name that was only the origin.
+APEX = ""
+
+
+def make_relative(name: str, origin: str) -> str:
+    """A name as a zone writes it, which is relative to the zone's origin.
+
+    A name already ending in the origin is not repeated: written as it stands
+    it would answer for name.origin.origin, which nothing asks for.
+    """
+    if name == origin:
+        return APEX
+    suffix = f".{origin}"
+    return name[: -len(suffix)] if name.endswith(suffix) else name
+
 
 def normalize(name: str) -> str:
     """Lowercase a name and drop its root dot, if it has one.

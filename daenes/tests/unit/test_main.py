@@ -91,7 +91,11 @@ def test_the_application_is_wired_from_the_configuration(tmp_path):
                     containers=(
                         FakeContainer(
                             name="web",
-                            networks={"compose_services": make_network_settings()},
+                            networks={
+                                "compose_services": make_network_settings(
+                                    dns_names=("web", "0123456789ab")
+                                )
+                            },
                         ),
                     ),
                 ),
@@ -162,14 +166,24 @@ def test_main_stops_on_an_error_no_retry_could_fix(monkeypatch):
     assert raised.value.code == ReturnCodes.UNRETRYABLE_EXCEPTION_IN_LIFECYCLE
 
 
-def test_main_stops_when_the_daemon_never_answered(monkeypatch):
-    """The socket not being mounted is the mistake this catches, and says so."""
+@pytest.mark.parametrize(
+    "return_code",
+    [ReturnCodes.DOCKER_UNREACHABLE_AT_STARTUP, ReturnCodes.DOCKER_TOO_OLD],
+    ids=["unreachable", "too_old"],
+)
+def test_main_stops_on_a_daemon_it_cannot_use(monkeypatch, return_code):
+    """A socket that was never mounted and a daemon that is too old differ.
+
+    Both are the deployment's to fix, and the exit code says which one it is.
+    """
     monkeypatch.setattr(main_module, "get_configuration", lambda: CONFIG)
     monkeypatch.setattr(
-        main_module, "connect", MagicMock(side_effect=DockerStartupError())
+        main_module,
+        "connect",
+        MagicMock(side_effect=DockerStartupError(return_code, "no")),
     )
 
     with pytest.raises(SystemExit) as raised:
         main()
 
-    assert raised.value.code == ReturnCodes.DOCKER_UNREACHABLE_AT_STARTUP
+    assert raised.value.code == return_code

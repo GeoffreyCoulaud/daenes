@@ -7,16 +7,22 @@ from docker.client import DockerClient
 from docker.errors import DockerException
 from docker.models.containers import Container
 from docker.models.networks import Network
+from docker.utils import version_lt
 from requests.exceptions import RequestException
 
-from .errors import RetryableError
+from .errors import ReturnCodes, RetryableError
 from .model import IpAddress, LocalDomain, PublishedNetwork
 
 # The label a network publishes a zone with, and the one a container opts out
-# with. A container is named by docker alone: its own name and its network
-# aliases, which are what docker already has for saying "call me this too".
+# with. A container is named by docker alone.
 DOMAIN_LABEL = "daenes.domain"
 ENABLED_LABEL = "daenes.enabled"
+
+# Every name docker answers for a container on a network: its own name, its
+# hostname, and its aliases. Introduced in API 1.44, which is docker 25.0.
+DNS_NAMES_KEY = "DNSNames"
+MINIMUM_API_VERSION = "1.44"
+MINIMUM_DOCKER_VERSION = "25.0"
 
 # Where docker puts a container's addresses on a network. Either may be empty:
 # the second one only exists on a network carrying IPv6.
@@ -34,28 +40,41 @@ class DockerUnreachable(RetryableError):
 
 
 class DockerStartupError(Exception):
-    """Raised when the docker daemon does not answer at startup at all."""
+    """Raised when the daemon cannot be used, whichever way it cannot.
 
-    def __init__(self, *args: object) -> None:
-        super().__init__(
-            *args,
-            "Could not reach the docker daemon. "
-            "Check that /var/run/docker.sock is mounted.",
-        )
+    Carries the exit code to stop on, since what to do about it depends on
+    which of the two it is.
+    """
+
+    def __init__(self, return_code: ReturnCodes, message: str) -> None:
+        super().__init__(message)
+        self.return_code = return_code
 
 
 def connect() -> DockerClient:
-    """Connect to the docker daemon, and ping it.
+    """Connect to the docker daemon, and check it is one daenes can read.
 
-    Creating a client proves nothing on its own, and a socket that was never
-    mounted is worth saying at startup rather than on the first turn of the loop.
+    Creating a client proves nothing on its own, so a socket that was never
+    mounted, and a daemon too old to say what it calls its containers, are both
+    worth finding here rather than on the first turn of the loop.
     """
     try:
         client = DockerClient.from_env()
-        client.ping()
-    except (DockerException, RequestException) as error:
-        raise DockerStartupError() from error
-    logging.debug("Connected to the docker daemon")
+        version = client.version()["ApiVersion"]
+    except (DockerException, RequestException, KeyError) as error:
+        raise DockerStartupError(
+            ReturnCodes.DOCKER_UNREACHABLE_AT_STARTUP,
+            "Could not reach the docker daemon. "
+            "Check that /var/run/docker.sock is mounted.",
+        ) from error
+    if version_lt(version, MINIMUM_API_VERSION):
+        raise DockerStartupError(
+            ReturnCodes.DOCKER_TOO_OLD,
+            f"This docker daemon speaks API {version}, and daenes needs "
+            f"{MINIMUM_API_VERSION} or newer, which is docker "
+            f"{MINIMUM_DOCKER_VERSION} or newer.",
+        )
+    logging.debug("Connected to a docker daemon speaking API %s", version)
     return client
 
 
@@ -134,22 +153,40 @@ class DockerDomainSource:
         if not addresses:
             logging.debug("Container %s has no address on %s", name, network.name)
             return None
+        names = _get_names(settings, container.short_id)
+        if not names:
+            logging.debug("Container %s answers to no name on %s", name, network.name)
+            return None
         return LocalDomain(
             container=container.short_id,
-            name=name,
+            names=names,
             addresses=addresses,
-            aliases=frozenset(settings.get("Aliases") or ()),
         )
 
 
 def _get_labels(network: Network) -> dict[str, str]:
-    """The labels of a network, which docker answers as null when it has none."""
+    """The labels of a network, which docker answers as an empty map when none.
+
+    Falling back rather than reading the key straight: Go serialises a map it
+    never allocated as null, and an older daemon may well do just that.
+    """
     return network.attrs.get("Labels") or {}
 
 
 def _is_enabled(container: Container) -> bool:
     """Whether a container wants publishing, which it does unless it says no."""
     return container.labels.get(ENABLED_LABEL, "true") == "true"
+
+
+def _get_names(settings: dict[str, Any], short_id: str) -> frozenset[str]:
+    """Every name docker answers for a container on one network.
+
+    Its identifier is one of them, and is left out: it is a name for the daemon
+    to know a container by, not one anybody types, and it changes on every
+    redeploy. A container given no hostname is given that identifier as one,
+    which the same comparison drops.
+    """
+    return frozenset(settings.get(DNS_NAMES_KEY) or ()) - {short_id}
 
 
 def _get_addresses(settings: dict[str, Any]) -> Iterator[IpAddress]:

@@ -1,7 +1,8 @@
 """Shared fixtures and stand-ins for the daenes unit tests.
 
 The fakes answer the way docker and the file system answer, so that a test
-reads like the deployment it stands for.
+reads like the deployment it stands for. What they answer with comes from
+`external_contracts`, whose every key is checked against a real daemon.
 """
 
 from collections.abc import Iterator
@@ -11,6 +12,16 @@ from typing import Any
 import pytest
 
 from daenes.main.model import IpAddress, LocalDomain, PublishedNetwork, Zone
+
+from ..external_contracts import (
+    DNS_NAMES_KEY,
+    IPV4_ADDRESS_KEY,
+    IPV6_ADDRESS_KEY,
+    LABELS_KEY,
+    NETWORK_SETTINGS_KEY,
+    NETWORKS_KEY,
+    NO_ADDRESS,
+)
 
 # The zone every test builds against, unless it is about the origin itself.
 ORIGIN = "services.internal"
@@ -63,20 +74,19 @@ class FakeZoneStore:
 
 
 def make_domain(
-    name: str = "web",
+    *names: str,
     addresses: tuple[str, ...] = ("172.20.0.2",),
-    aliases: tuple[str, ...] = (),
     container: str | None = None,
 ) -> LocalDomain:
     """One container on one network, as the docker adapter would report it.
 
     Two of these are one container unless the test says otherwise.
     """
+    known_as = names or ("web",)
     return LocalDomain(
-        container=name if container is None else container,
-        name=name,
+        container=known_as[0] if container is None else container,
+        names=frozenset(known_as),
         addresses=tuple(ip_address(address) for address in addresses),
-        aliases=frozenset(aliases),
     )
 
 
@@ -92,13 +102,13 @@ def make_published_network(
 def make_network_settings(
     address: str | None = "172.20.0.2",
     ipv6_address: str | None = None,
-    aliases: tuple[str, ...] | None = None,
+    dns_names: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     """What docker answers about one container on one network."""
     return {
-        "IPAddress": address or "",
-        "GlobalIPv6Address": ipv6_address or "",
-        "Aliases": list(aliases) if aliases is not None else None,
+        IPV4_ADDRESS_KEY: address or NO_ADDRESS,
+        IPV6_ADDRESS_KEY: ipv6_address or NO_ADDRESS,
+        DNS_NAMES_KEY: list(dns_names) if dns_names is not None else None,
     }
 
 
@@ -115,7 +125,7 @@ class FakeContainer:
         self.name = name
         self.short_id = short_id
         self.labels = labels or {}
-        self.attrs = {"NetworkSettings": {"Networks": networks or {}}}
+        self.attrs = {NETWORK_SETTINGS_KEY: {NETWORKS_KEY: networks or {}}}
 
 
 class FakeNetwork:
@@ -128,8 +138,7 @@ class FakeNetwork:
         containers: tuple[FakeContainer, ...] = (),
     ) -> None:
         self.name = name
-        # Docker answers a null rather than an empty map when there are none.
-        self.attrs: dict[str, Any] = {"Labels": labels}
+        self.attrs: dict[str, Any] = {LABELS_KEY: labels}
         self.reloaded = 0
         self._containers = list(containers)
 

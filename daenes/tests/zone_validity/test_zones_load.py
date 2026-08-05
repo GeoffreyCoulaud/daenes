@@ -5,15 +5,16 @@ import pytest
 from daenes.main.dns_names import MAX_LABEL_LENGTH, MAX_NAME_LENGTH
 from daenes.main.zone_synchronizer import SERIAL_MODULO
 
-from .conftest import CHECKER, ORIGIN, assert_loads, check_zone, make_domain, write_zone
+from ..zone_checker import CHECKER
+from .conftest import ORIGIN, assert_loads, check_zone, make_domain, write_zone
 
 
 def test_the_zone_of_a_whole_deployment_loads(checker, tmp_path):
     """The example from the README, as daenes would write it."""
     domains = (
-        make_domain(name="www", addresses=("172.20.0.2",), aliases=("httpd", "web")),
-        make_domain(name="db", addresses=("172.20.0.3",)),
-        make_domain(name="proxy", addresses=("172.20.0.4",), aliases=("gateway",)),
+        make_domain("www", "httpd", "web", addresses=("172.20.0.2",)),
+        make_domain("db", addresses=("172.20.0.3",)),
+        make_domain("proxy", "gateway", addresses=("172.20.0.4",)),
     )
 
     assert_loads(checker, write_zone(tmp_path, domains))
@@ -25,7 +26,7 @@ def test_a_zone_nothing_asks_to_be_published_in_loads(checker, tmp_path):
 
 
 def test_a_dual_stack_zone_loads(checker, tmp_path):
-    domains = (make_domain(name="web", addresses=("172.20.0.2", "fd00::2")),)
+    domains = (make_domain("web", addresses=("172.20.0.2", "fd00::2")),)
 
     assert_loads(checker, write_zone(tmp_path, domains))
 
@@ -33,8 +34,8 @@ def test_a_dual_stack_zone_loads(checker, tmp_path):
 def test_a_zone_of_containers_reachable_several_ways_loads(checker, tmp_path):
     """Several addresses on one name is an answer, not a conflict."""
     domains = (
-        make_domain(name="web", addresses=("172.20.0.2",)),
-        make_domain(name="web", addresses=("172.21.0.2",)),
+        make_domain("web", addresses=("172.20.0.2",)),
+        make_domain("web", addresses=("172.21.0.2",)),
     )
 
     assert_loads(checker, write_zone(tmp_path, domains))
@@ -43,7 +44,7 @@ def test_a_zone_of_containers_reachable_several_ways_loads(checker, tmp_path):
 @pytest.mark.parametrize("ttl", [0, 60, 86400], ids=["no_caching", "default", "a_day"])
 def test_a_zone_loads_whatever_its_ttl(checker, tmp_path, ttl):
     """Zero is legal, and tells a resolver not to cache the answer at all."""
-    domains = (make_domain(name="web"),)
+    domains = (make_domain("web"),)
 
     assert_loads(checker, write_zone(tmp_path, domains, ttl=ttl))
 
@@ -55,7 +56,7 @@ def test_a_zone_loads_whatever_its_ttl(checker, tmp_path, ttl):
 )
 def test_a_zone_loads_whatever_its_serial(checker, tmp_path, serial):
     """RFC 1982: the serial wraps around, and zero is a serial like any other."""
-    domains = (make_domain(name="web"),)
+    domains = (make_domain("web"),)
 
     assert_loads(checker, write_zone(tmp_path, domains, serial=serial))
 
@@ -67,7 +68,14 @@ def test_a_zone_loads_whatever_its_serial(checker, tmp_path, serial):
 )
 def test_every_name_daenes_accepts_loads(checker, tmp_path, name):
     """What the name rules let through has to be what a server takes."""
-    domains = (make_domain(name=name, aliases=(f"alias-of-{name}",)),)
+    domains = (make_domain(name, f"alias-of-{name}"),)
+
+    assert_loads(checker, write_zone(tmp_path, domains))
+
+
+def test_a_zone_answering_for_its_own_domain_loads(checker, tmp_path):
+    """A container named after the zone, which lands on the apex beside the SOA."""
+    domains = (make_domain(ORIGIN, addresses=("172.20.0.2",)),)
 
     assert_loads(checker, write_zone(tmp_path, domains))
 
@@ -77,7 +85,7 @@ def test_the_longest_name_daenes_accepts_loads(checker, tmp_path):
     origin = ".".join(["a" * 60] * 4)
     name = "b" * (MAX_NAME_LENGTH - len(origin) - len("."))
 
-    path = write_zone(tmp_path, (make_domain(name=name),), origin=origin)
+    path = write_zone(tmp_path, (make_domain(name),), origin=origin)
 
     assert_loads(checker, path, origin=origin)
 
@@ -85,7 +93,7 @@ def test_the_longest_name_daenes_accepts_loads(checker, tmp_path):
 def test_a_zone_of_many_containers_loads(checker, tmp_path):
     """Nothing in the format depends on how few records there are."""
     domains = tuple(
-        make_domain(name=f"web-{number}", addresses=(f"172.20.0.{number}",))
+        make_domain(f"web-{number}", addresses=(f"172.20.0.{number}",))
         for number in range(2, 200)
     )
 

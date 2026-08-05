@@ -3,12 +3,16 @@
 import pytest
 
 from daenes.main.dns_names import (
+    APEX,
     MAX_LABEL_LENGTH,
     MAX_NAME_LENGTH,
     is_valid_label,
     is_valid_name,
+    make_relative,
     normalize,
 )
+
+ORIGIN = "services.internal"
 
 
 @pytest.mark.parametrize(
@@ -73,6 +77,26 @@ def test_valid_names(name):
 def test_invalid_names(name):
     """RFC 1035 section 2.3.4 for the length, RFC 1123 for everything else."""
     assert not is_valid_name(name)
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("web", "web"),
+        (f"web.{ORIGIN}", "web"),
+        (f"api.v1.{ORIGIN}", "api.v1"),
+        (ORIGIN, APEX),
+        # Another domain's name, which daenes can only serve under its own.
+        ("mail.example.com", "mail.example.com"),
+        # Ends in the origin's text without ending in the origin.
+        (f"web-{ORIGIN}", f"web-{ORIGIN}"),
+    ],
+    ids=["plain", "qualified", "subdomain", "the_origin", "elsewhere", "not_a_label"],
+)
+def test_make_relative(name, expected):
+    """A zone writes its names relative to its origin, so one already there
+    would otherwise be written twice."""
+    assert make_relative(name, ORIGIN) == expected
 
 
 def test_the_longest_name_is_valid():

@@ -61,7 +61,9 @@ www IN A 172.27.0.2
 
 Point your DNS server at the directory, and `www.services.internal` resolves.
 
-Docker is the only supported way to run daenes. This example is ready to run in [`examples/readme`](examples/readme).
+Docker is the only supported way to run daenes, and the daemon it reads has to be **docker 25.0 or newer**: that is the version that started telling clients the names it answers for a container. Daenes says so and stops if it finds an older one.
+
+This example is ready to run in [`examples/readme`](examples/readme).
 
 ## Configuration
 
@@ -77,7 +79,7 @@ Docker is the only supported way to run daenes. This example is ready to run in 
 |---|---|---|
 | `daenes.enabled` | `true` | Set it to `false` to leave a container out. Containers on a published network are in by default, with or without the label. |
 
-Nothing names a container here: docker already does, through its name and its network aliases.
+Nothing names a container here: docker already does, through its name, its hostname and its network aliases.
 
 ### Environment variables
 
@@ -98,15 +100,16 @@ Nothing names a container here: docker already does, through its name and its ne
 
 ## How names are chosen
 
-Every way docker names a container becomes a name in its network's zone, `services.internal` in the example above:
+Daenes publishes what docker resolves. Docker keeps a list of the names it answers for each container on each network, and every one of them becomes a name in that network's zone, `services.internal` in the example above:
 
 | In the deployment | Answers at |
 |---|---|
 | `container_name: www` | `www.services.internal` |
 | the compose service name, `httpd` | `httpd.services.internal` |
 | a [network alias](https://docs.docker.com/reference/compose-file/services/#aliases), `front` | `front.services.internal` |
+| `hostname: mail` | `mail.services.internal` |
 
-Each is an address record of its own rather than an alias pointing at one canonical name, which is how docker's own resolver answers them too. A container whose name cannot be served is therefore still reached through the ones that can.
+Each is an address record of its own rather than an alias pointing at one canonical name, which is how docker's own resolver answers them too. A container holding a name that cannot be served is therefore still reached through the ones that can.
 
 Addresses follow the network: A on an IPv4 network, A and AAAA on a [dual stack](https://docs.docker.com/engine/daemon/ipv6/) one, AAAA alone with `--ipv4=false`. A container on several published networks lands in each zone, with the address it has there.
 
@@ -119,6 +122,15 @@ Names are lowercased, since DNS ignores case. What no host may bear is left out,
 - letters, digits and hyphens, none at either end ([RFC 1123](https://datatracker.ietf.org/doc/html/rfc1123#section-2.1)), which rules out the underscore docker puts in the name it gives a compose network
 - 63 characters per label, 253 for the whole name ([RFC 1035](https://datatracker.ietf.org/doc/html/rfc1035#section-2.3.4))
 - `ns`, which belongs to the zone's own nameserver
+- the short identifier docker knows a container by, which nobody types and which changes on every redeploy
+
+### Names that already carry a domain
+
+A name is published under the network's domain, so `api.v1` answers at `api.v1.services.internal`. A name that already ends in that domain is not repeated: `hostname: web.services.internal` answers at `web.services.internal`, not at `web.services.internal.services.internal`.
+
+A container named after the domain itself answers for it, so `hostname: services.internal` makes `services.internal` resolve to that container.
+
+A name belonging to somewhere else is published all the same, under this domain: `hostname: mail.example.com` answers at `mail.example.com.services.internal`. Nothing tells that apart from a deployment organising itself in subdomains, and daenes publishes what docker knows rather than guessing what was meant.
 
 ### Sharing a name or a zone
 
@@ -154,6 +166,7 @@ front). Set ALLOW_MULTIPLE_NETWORKS_PER_ZONE to true to merge them
 
 - **A network is published by naming its domain.** `daenes.enabled=true` on a network no longer publishes anything: replace it with `daenes.domain=<the domain you want>`, and daenes reports the ones left behind. The domain used to be guessed from the network's name, which docker prefixes with the compose project name and an underscore, and no DNS server would load the zone that came out of it.
 - **`daenes.domain` on a container does nothing.** It used to replace the container's name; a [network alias](https://docs.docker.com/reference/compose-file/services/#aliases) adds one, which is the same thing said in docker's own terms. Containers keep answering at their name and at every alias they have.
+- **A container's `hostname` is published too**, along with everything else docker resolves it by. This is what asks for docker 25.0 or newer.
 - **`INTERVAL` is now `SUCCESS_INTERVAL`.**
 - **`LOG_LEVEL` defaults to `INFO`**, where the image used to set `DEBUG`.
 - **Sharing a name or a zone is refused** unless one of the two settings above says otherwise. Both used to happen silently.

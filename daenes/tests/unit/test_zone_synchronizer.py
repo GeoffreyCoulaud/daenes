@@ -65,7 +65,7 @@ def synchronize_one(*networks, store=None, allowances=NOTHING_ALLOWED):
 
 
 def test_a_zone_carries_its_origin_its_ttl_and_its_nameserver():
-    zone = synchronize_one(make_published_network(make_domain(name="web")))
+    zone = synchronize_one(make_published_network(make_domain("web")))
 
     assert zone.origin == ORIGIN
     assert zone.ttl == TTL
@@ -82,8 +82,8 @@ def test_a_network_everything_left_still_gets_a_zone():
 
 def test_each_origin_becomes_its_own_zone():
     saved = synchronize(
-        make_published_network(make_domain(name="web"), origin="services.internal"),
-        make_published_network(make_domain(name="db"), origin="admin.internal"),
+        make_published_network(make_domain("web"), origin="services.internal"),
+        make_published_network(make_domain("db"), origin="admin.internal"),
     )
 
     assert [zone.origin for zone in saved] == ["admin.internal", "services.internal"]
@@ -92,8 +92,8 @@ def test_each_origin_becomes_its_own_zone():
 def test_two_networks_naming_one_origin_are_refused_by_default(caplog):
     """Merging changes what every name answers, so it is asked for explicitly."""
     saved = synchronize(
-        make_published_network(make_domain(name="web"), name="front"),
-        make_published_network(make_domain(name="db"), name="back"),
+        make_published_network(make_domain("web"), name="front"),
+        make_published_network(make_domain("db"), name="back"),
     )
 
     assert saved == []
@@ -103,8 +103,8 @@ def test_two_networks_naming_one_origin_are_refused_by_default(caplog):
 def test_two_networks_naming_one_origin_land_in_one_zone():
     """Merging them is a deliberate use, and has to be asked for."""
     zone = synchronize_one(
-        make_published_network(make_domain(name="web", addresses=("172.20.0.2",))),
-        make_published_network(make_domain(name="db", addresses=("172.21.0.2",))),
+        make_published_network(make_domain("web", addresses=("172.20.0.2",))),
+        make_published_network(make_domain("db", addresses=("172.21.0.2",))),
         allowances=MERGED_NETWORKS,
     )
 
@@ -115,8 +115,8 @@ def test_two_networks_naming_one_origin_land_in_one_zone():
 def test_an_origin_is_matched_without_regard_to_case():
     """RFC 4343: two spellings of one domain are one domain."""
     zone = synchronize_one(
-        make_published_network(make_domain(name="web"), origin="Services.Internal"),
-        make_published_network(make_domain(name="db"), origin="services.internal"),
+        make_published_network(make_domain("web"), origin="Services.Internal"),
+        make_published_network(make_domain("db"), origin="services.internal"),
         allowances=MERGED_NETWORKS,
     )
 
@@ -127,8 +127,8 @@ def test_an_origin_is_matched_without_regard_to_case():
 def test_a_container_reachable_at_several_addresses_answers_with_all_of_them():
     """Once the deployment asks for it, the client picks and daenes says nothing."""
     zone = synchronize_one(
-        make_published_network(make_domain(name="web", addresses=("172.20.0.2",))),
-        make_published_network(make_domain(name="web", addresses=("172.21.0.9",))),
+        make_published_network(make_domain("web", addresses=("172.20.0.2",))),
+        make_published_network(make_domain("web", addresses=("172.21.0.9",))),
         allowances=SHARED_NAMES,
     )
 
@@ -140,7 +140,7 @@ def test_a_container_reachable_at_several_addresses_answers_with_all_of_them():
 
 def test_addresses_are_ordered_by_family_then_value():
     """The two families do not compare, and the output has to be stable."""
-    domain = make_domain(name="web", addresses=("fd00::2", "172.20.0.9", "172.20.0.2"))
+    domain = make_domain("web", addresses=("fd00::2", "172.20.0.9", "172.20.0.2"))
 
     zone = synchronize_one(make_published_network(domain), allowances=SHARED_NAMES)
 
@@ -151,9 +151,12 @@ def test_addresses_are_ordered_by_family_then_value():
     )
 
 
-def test_an_alias_answers_with_the_addresses_of_its_container():
-    """Docker's own resolver answers an alias the same way, with no CNAME."""
-    domain = make_domain(name="web", aliases=("www", "front"))
+def test_every_name_of_a_container_answers_with_its_addresses():
+    """None of them is more canonical than the others, so none points at another.
+
+    Docker's own resolver answers them all the same way, with no CNAME.
+    """
+    domain = make_domain("web", "www", "front")
 
     zone = synchronize_one(make_published_network(domain))
 
@@ -161,23 +164,14 @@ def test_an_alias_answers_with_the_addresses_of_its_container():
     assert addresses_of(zone, "front") == (ip_address("172.20.0.2"),)
 
 
-def test_a_container_listed_among_its_own_aliases_is_one_name():
-    """Docker lists a container's own name among its aliases."""
-    domain = make_domain(name="web", aliases=("web", "www"))
-
-    zone = synchronize_one(make_published_network(domain))
-
-    assert set(names_of(zone)) == {NAMESERVER_NAME, "web", "www"}
-
-
-def test_an_alias_of_a_container_on_two_networks_answers_with_both_addresses():
-    """A container on two merged networks reports its aliases on each."""
+def test_a_second_name_of_a_container_on_two_networks_answers_with_both():
+    """A container on two merged networks answers to its names on each."""
     zone = synchronize_one(
         make_published_network(
-            make_domain(name="web", addresses=("172.20.0.2",), aliases=("www",))
+            make_domain("web", "www", addresses=("172.20.0.2",))
         ),
         make_published_network(
-            make_domain(name="web", addresses=("172.21.0.2",), aliases=("www",))
+            make_domain("web", "www", addresses=("172.21.0.2",))
         ),
         allowances=SHARED_NAMES,
     )
@@ -188,21 +182,21 @@ def test_an_alias_of_a_container_on_two_networks_answers_with_both_addresses():
     )
 
 
-def test_a_container_kept_out_of_dns_still_answers_through_its_aliases():
+def test_a_container_one_of_whose_names_is_unservable_keeps_the_others():
     """Each name stands on its own, so an unservable one takes nothing with it."""
-    domain = make_domain(name="my_service", aliases=("api",))
+    domain = make_domain("my_service", "api")
 
     zone = synchronize_one(make_published_network(domain))
 
     assert set(names_of(zone)) == {NAMESERVER_NAME, "api"}
 
 
-def test_a_name_shared_by_a_container_and_an_alias_is_dropped(caplog):
+def test_a_name_two_containers_answer_to_is_dropped(caplog):
     """A deployment arrives at this by accident more often than on purpose."""
     zone = synchronize_one(
         make_published_network(
-            make_domain(name="www", addresses=("172.20.0.3",)),
-            make_domain(name="web", addresses=("172.20.0.2",), aliases=("www",)),
+            make_domain("www", addresses=("172.20.0.3",)),
+            make_domain("web", "www", addresses=("172.20.0.2",)),
         )
     )
 
@@ -215,10 +209,10 @@ def test_a_name_two_containers_claim_is_dropped(caplog):
     """Two networks sharing a domain may each hold a container of one name."""
     zone = synchronize_one(
         make_published_network(
-            make_domain(name="web", addresses=("172.20.0.2",), container="one")
+            make_domain("web", addresses=("172.20.0.2",), container="one")
         ),
         make_published_network(
-            make_domain(name="web", addresses=("172.21.0.2",), container="two")
+            make_domain("web", addresses=("172.21.0.2",), container="two")
         ),
         allowances=MERGED_NETWORKS,
     )
@@ -231,8 +225,8 @@ def test_a_name_two_containers_claim_is_dropped(caplog):
 def test_a_container_on_two_networks_of_one_zone_is_dropped_too(caplog):
     """One container or two, a client still reaches whichever it is handed."""
     zone = synchronize_one(
-        make_published_network(make_domain(name="web", addresses=("172.20.0.2",))),
-        make_published_network(make_domain(name="web", addresses=("172.21.0.2",))),
+        make_published_network(make_domain("web", addresses=("172.20.0.2",))),
+        make_published_network(make_domain("web", addresses=("172.21.0.2",))),
         allowances=MERGED_NETWORKS,
     )
 
@@ -242,7 +236,7 @@ def test_a_container_on_two_networks_of_one_zone_is_dropped_too(caplog):
 
 def test_a_name_answering_over_both_families_is_left_alone(caplog):
     """Dual stack is one host over two protocols, not a choice between two."""
-    domain = make_domain(name="web", addresses=("172.20.0.2", "fd00::2"))
+    domain = make_domain("web", addresses=("172.20.0.2", "fd00::2"))
 
     zone = synchronize_one(make_published_network(domain))
 
@@ -257,10 +251,10 @@ def test_several_addresses_may_be_asked_for(caplog):
     """The advanced use, which has to be turned on rather than fallen into."""
     zone = synchronize_one(
         make_published_network(
-            make_domain(name="web", addresses=("172.20.0.2",), container="one")
+            make_domain("web", addresses=("172.20.0.2",), container="one")
         ),
         make_published_network(
-            make_domain(name="web", addresses=("172.21.0.2",), container="two")
+            make_domain("web", addresses=("172.21.0.2",), container="two")
         ),
         allowances=SHARED_NAMES,
     )
@@ -272,18 +266,17 @@ def test_several_addresses_may_be_asked_for(caplog):
     assert not caplog.text
 
 
-@pytest.mark.parametrize(
-    "domain",
-    [make_domain(name=NAMESERVER_NAME), make_domain(aliases=(NAMESERVER_NAME,))],
-    ids=["as_a_container", "as_an_alias"],
-)
-def test_the_nameserver_name_belongs_to_the_zone_alone(domain):
+def test_the_nameserver_name_belongs_to_the_zone_alone(caplog):
     """Handing it to a container would leave the zone's NS record lying."""
+    domain = make_domain("web", NAMESERVER_NAME)
+
     zone = synchronize_one(make_published_network(domain))
 
-    # Whatever the container is called elsewhere, the nameserver's name
-    # answers with the address the configuration gave, and with nothing else.
+    # Whatever else the container is known by, the nameserver's name answers
+    # with the address the configuration gave, and with nothing else.
     assert addresses_of(zone, NAMESERVER_NAME) == (NAMESERVER_ADDRESS,)
+    assert set(names_of(zone)) == {NAMESERVER_NAME, "web"}
+    assert "nameserver" in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -291,20 +284,47 @@ def test_the_nameserver_name_belongs_to_the_zone_alone(domain):
     ["my_service", "-web", ""],
     ids=["underscore", "leading_hyphen", "empty"],
 )
-def test_a_container_that_cannot_be_named_in_dns_is_ignored(name):
+def test_a_name_that_no_host_may_bear_is_ignored(name):
     zone = synchronize_one(
-        make_published_network(make_domain(name=name), make_domain(name="web"))
+        make_published_network(make_domain(name), make_domain("web"))
     )
 
     assert set(names_of(zone)) == {NAMESERVER_NAME, "web"}
 
 
-def test_an_alias_that_cannot_be_named_in_dns_is_ignored():
-    domain = make_domain(name="web", aliases=("my_alias", "www"))
+def test_a_name_already_ending_in_the_zones_domain_is_not_repeated():
+    """Writing it as it stands would answer for web.services.internal.services.internal.
+
+    Which is what someone naming their container after the name they want to
+    resolve would get, and it is the natural thing to do.
+    """
+    domain = make_domain(f"web.{ORIGIN}")
 
     zone = synchronize_one(make_published_network(domain))
 
-    assert set(names_of(zone)) == {NAMESERVER_NAME, "web", "www"}
+    assert addresses_of(zone, "web") == (ip_address("172.20.0.2"),)
+
+
+def test_a_container_named_after_the_zone_itself_answers_for_the_domain():
+    """A deployment saying this container is what the domain is for."""
+    domain = make_domain(ORIGIN)
+
+    zone = synchronize_one(make_published_network(domain))
+
+    assert addresses_of(zone, "") == (ip_address("172.20.0.2"),)
+
+
+def test_a_name_belonging_to_another_domain_is_published_under_this_one():
+    """Daenes only serves under its own domain, and says what it publishes.
+
+    Nothing tells this apart from a deployment organising itself in
+    subdomains, which is a use of its own.
+    """
+    domain = make_domain("mail.example.com")
+
+    zone = synchronize_one(make_published_network(domain))
+
+    assert addresses_of(zone, "mail.example.com") == (ip_address("172.20.0.2"),)
 
 
 def test_a_name_too_long_for_its_zone_is_ignored():
@@ -314,8 +334,8 @@ def test_a_name_too_long_for_its_zone_is_ignored():
 
     zone = synchronize_one(
         make_published_network(
-            make_domain(name="b" * room_left),
-            make_domain(name="c" * (room_left + 1)),
+            make_domain("b" * room_left),
+            make_domain("c" * (room_left + 1)),
             origin=origin,
         )
     )
@@ -376,12 +396,12 @@ def test_an_unchanged_zone_is_left_alone():
 
 def test_a_changed_zone_is_written_again_with_a_new_serial():
     synchronizer, source, store = make_synchronizer(
-        [make_published_network(make_domain(name="web"))]
+        [make_published_network(make_domain("web"))]
     )
 
     synchronizer.synchronize()
     source.networks[0] = make_published_network(
-        make_domain(name="web"), make_domain(name="db")
+        make_domain("web"), make_domain("db")
     )
     synchronizer.synchronize()
 

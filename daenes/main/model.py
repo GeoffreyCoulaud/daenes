@@ -8,14 +8,15 @@ type IpAddress = IPv4Address | IPv6Address
 class LocalDomain:
     """A container on a network, as docker describes it.
 
-    `container` is what tells two of these asking for one name apart. Whether
-    any of this can be served is decided where the zone is built.
+    `names` is every name docker answers for it there, its own and its aliases
+    alike, none of them more canonical than the others. `container` is what
+    tells two of these asking for one name apart. Whether any of this can be
+    served is decided where the zone is built.
     """
 
     container: str
-    name: str
+    names: frozenset[str]
     addresses: tuple[IpAddress, ...]
-    aliases: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
