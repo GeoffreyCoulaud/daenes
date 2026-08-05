@@ -1,7 +1,7 @@
 """Shared fixtures and stand-ins for the daenes unit tests.
 
-The fakes here answer the way docker and the file system answer, so that what
-a test sets up reads like the deployment it stands for.
+The fakes answer the way docker and the file system answer, so that a test
+reads like the deployment it stands for.
 """
 
 from collections.abc import Iterator
@@ -70,8 +70,7 @@ def make_domain(
 ) -> LocalDomain:
     """One container on one network, as the docker adapter would report it.
 
-    Two of these are the same container unless the test says otherwise, since
-    what usually brings one name back twice is a container on two networks.
+    Two of these are one container unless the test says otherwise.
     """
     return LocalDomain(
         container=name if container is None else container,

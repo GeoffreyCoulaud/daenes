@@ -32,7 +32,7 @@ def configure_logging() -> None:
                 },
             },
             "loggers": {
-                # One line per HTTP call to the daemon, which is a lot of them.
+                # One line per call to the daemon, which is a lot of them.
                 "urllib3": {
                     "level": "DEBUG" if log_level == "DEBUG" else "WARNING",
                 },
@@ -48,7 +48,7 @@ def configure_logging() -> None:
 
 
 def build_application(config: Config, client: DockerClient) -> Application:
-    """Wire the application up, which is the one place that knows every part."""
+    """Wire every part together, which happens here and nowhere else."""
     return Application(
         synchronizer=ZoneSynchronizer(
             source=DockerDomainSource(client=client),
@@ -64,9 +64,9 @@ def build_application(config: Config, client: DockerClient) -> Application:
 
 
 def handle_sigterm(*_: object) -> None:
-    """Shut down on SIGTERM, the signal a container is stopped with.
+    """Shut down on SIGTERM, which is how docker stops a container.
 
-    Without a handler the kernel never delivers it to PID 1, so `docker stop`
+    Without a handler the kernel never delivers it to PID 1, and `docker stop`
     waits out its whole timeout before resorting to SIGKILL.
     """
     logging.info("Received SIGTERM, shutting down")

@@ -10,10 +10,9 @@ class Clock(Protocol):
 
 
 class NetworkSource(Protocol):
-    """The deployment being watched, seen as the zones it asks for.
+    """The deployment being watched, as the zones it asks for.
 
-    Answers what the deployment says, and judges none of it: an empty list
-    means nothing asks to be published right now, which is not an error.
+    An empty list means nothing asks to be published, which is not an error.
     """
 
     def get_published_networks(self) -> list[PublishedNetwork]: ...
@@ -22,8 +21,8 @@ class NetworkSource(Protocol):
 class ZoneStore(Protocol):
     """The zone files a DNS server reads, as the application writes them.
 
-    `get_serial` answers None when no serial can be read back, which is what a
-    first run finds, and tells the caller to start counting from the beginning.
+    `get_serial` answers None when there is none to read back, which tells the
+    caller to start counting over.
     """
 
     def get_serial(self, origin: str) -> int | None: ...

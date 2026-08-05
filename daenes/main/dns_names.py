@@ -1,30 +1,21 @@
-"""The name rules a zone file has to obey, and nothing else.
-
-Kept in their own module so each one can be read against the RFC it comes
-from, and tested against it.
-"""
+"""The name rules a zone file has to obey, each next to the RFC it comes from."""
 
 import re
 
-# RFC 1035 section 2.3.4. The 255 octet limit is on the wire form, where every
-# label carries a length octet and the root label closes the name; 253 is what
-# is left for the text form these rules are applied to.
+# RFC 1035 section 2.3.4. Its 255 octet limit counts a length octet per label
+# and the root label, leaving 253 for the text form these rules apply to.
 MAX_LABEL_LENGTH = 63
 MAX_NAME_LENGTH = 253
 
-# RFC 1123 section 2.1, relaxing RFC 952: letters, digits and hyphens, never a
-# hyphen at either end, and a leading digit is allowed. Names are lowercased
-# before being matched, so the pattern does not spell the upper case out.
+# RFC 1123 section 2.1: letters, digits and hyphens, no hyphen at either end,
+# a leading digit allowed. Names are lowercased before being matched.
 _LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$")
 
 
 def normalize(name: str) -> str:
-    """Put a name in the form daenes writes and compares names in.
+    """Lowercase a name and drop its root dot, if it has one.
 
-    DNS matches names without regard to case (RFC 4343), so lowercasing loses
-    nothing and makes what we write canonical. A single trailing dot is
-    dropped, since a fully qualified name and its relative spelling name the
-    same thing here.
+    DNS ignores case (RFC 4343), so this only makes what we write canonical.
     """
     without_root = name[:-1] if name.endswith(".") else name
     return without_root.lower()
@@ -36,7 +27,7 @@ def is_valid_label(label: str) -> bool:
 
 
 def is_valid_name(name: str) -> bool:
-    """Whether a normalized name may be written into a zone file as it is."""
+    """Whether a normalized name may be written into a zone as it is."""
     if len(name) > MAX_NAME_LENGTH:
         return False
     return all(is_valid_label(label) for label in name.split("."))

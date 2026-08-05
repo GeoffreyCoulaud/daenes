@@ -10,7 +10,6 @@ DEFAULT_ZONES_DIRECTORY = "/zones"
 DEFAULT_TTL = 60
 DEFAULT_SUCCESS_INTERVAL = 60
 DEFAULT_RETRY_INTERVAL = 10
-# Both off unless asked for, see the Allowances they are read into.
 DEFAULT_ALLOW_MULTIPLE_ADDRESSES_PER_NAME = False
 DEFAULT_ALLOW_MULTIPLE_NETWORKS_PER_ZONE = False
 
@@ -21,8 +20,8 @@ FALSE = "false"
 class ConfigurationError(Exception):
     """Raised when the environment does not describe a usable setup.
 
-    Carries the exit code to stop on, since a mistake in the environment is
-    reported to whoever started the container rather than retried.
+    Carries the exit code to stop on: a mistake in the environment is reported
+    to whoever started the container rather than retried.
     """
 
     def __init__(self, return_code: ReturnCodes, message: str) -> None:
@@ -51,7 +50,7 @@ def _get_required(name: str) -> str:
 
 
 def _get_integer(name: str, default: int, minimum: int) -> int:
-    """Read a whole number of seconds, refusing one that makes no sense."""
+    """Read a whole number of seconds, no smaller than it may be."""
     if (value := getenv(name)) is None:
         return default
     try:
@@ -70,11 +69,7 @@ def _get_integer(name: str, default: int, minimum: int) -> int:
 
 
 def _get_boolean(name: str, default: bool) -> bool:
-    """Read a setting that is on or off, and nothing in between.
-
-    Refusing everything but the two words keeps a value that reads like a yes
-    from quietly meaning no.
-    """
+    """Read a setting that is on or off, so a yes cannot quietly mean no."""
     if (value := getenv(name)) is None:
         return default
     if (spelled := value.strip().lower()) not in (TRUE, FALSE):
@@ -86,7 +81,7 @@ def _get_boolean(name: str, default: bool) -> bool:
 
 
 def _get_nameserver_address() -> IpAddress:
-    """Read the address of the DNS server the zones name as their own."""
+    """Read the address every zone names as its nameserver."""
     value = _get_required("DNS_IP")
     try:
         return ip_address(value)
@@ -102,7 +97,7 @@ def get_configuration() -> Config:
     return Config(
         zones_directory=Path(getenv("ZONES_DIR", DEFAULT_ZONES_DIRECTORY)),
         nameserver_address=_get_nameserver_address(),
-        # A TTL of zero is legal, and tells resolvers not to cache at all.
+        # Zero is legal: it tells resolvers not to cache at all.
         ttl=_get_integer("DNS_TTL", DEFAULT_TTL, minimum=0),
         success_interval=_get_integer(
             "SUCCESS_INTERVAL", DEFAULT_SUCCESS_INTERVAL, minimum=1

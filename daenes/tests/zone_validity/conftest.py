@@ -1,9 +1,8 @@
 """Checking what daenes writes with the checker of a real DNS server.
 
-These tests are outside `testpaths`, so `uv run pytest` never needs the binary
-they drive. CONTRIBUTING.md says how to install it, and CI runs them on every
-pull request. What they prove is what no test of our own could: that a zone
-daenes wrote is one BIND agrees to load.
+They prove what no test of our own could: that a zone daenes wrote is one BIND
+agrees to load. Outside `testpaths`, so `uv run pytest` never needs the binary
+they drive; CONTRIBUTING.md says how to install it.
 """
 
 import shutil
@@ -115,9 +114,8 @@ def check_zone(checker: str, path: Path, origin: str = ORIGIN) -> tuple[int, str
 def assert_loads(checker: str, path: Path, origin: str = ORIGIN) -> None:
     """Fail with what the checker said, rather than with a return code.
 
-    A warning fails too: the flags above turn everything that would stop a
-    server into an error, so whatever is left to warn about is something
-    daenes wrote that it had no business writing.
+    A warning fails too: the flags above make an error of anything that would
+    stop a server, so what is left to warn about is still worth knowing.
     """
     code, output = check_zone(checker, path, origin)
     assert code == 0, f"{CHECKER} refused the zone:\n{output}\n{path.read_text()}"

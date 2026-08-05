@@ -8,11 +8,8 @@ type IpAddress = IPv4Address | IPv6Address
 class LocalDomain:
     """A container on a network, as docker describes it.
 
-    `container` identifies the container itself, which is the only thing that
-    tells one of these apart from another asking for the same name.
-
-    Nothing here is known to be servable yet. Whether these names may be
-    written into a zone is decided where the zone is built.
+    `container` is what tells two of these asking for one name apart. Whether
+    any of this can be served is decided where the zone is built.
     """
 
     container: str
@@ -23,11 +20,10 @@ class LocalDomain:
 
 @dataclass(frozen=True)
 class PublishedNetwork:
-    """A network asking for a zone, and whatever is on it right now.
+    """A network asking for a zone, and what is on it right now.
 
-    A network with nothing on it is not the same as no network at all: the
-    first one asks for a zone that answers for nobody, and letting the names
-    that used to be on it go on resolving would be worse than saying so.
+    One with nothing on it still asks for a zone, so that the names that used
+    to be there stop resolving.
     """
 
     name: str
@@ -37,11 +33,10 @@ class PublishedNetwork:
 
 @dataclass(frozen=True)
 class Allowances:
-    """The ways of sharing a deployment has explicitly asked for.
+    """The ways of sharing the deployment asked for.
 
-    Both are arrived at by accident more often than on purpose, and both make
-    what a client gets depend on which container or which network it happened
-    to reach. Off unless asked for: daenes refuses rather than guesses.
+    Both make what a client gets depend on which container or network it
+    happened to reach, so daenes refuses them rather than guessing.
     """
 
     multiple_addresses_per_name: bool = False
@@ -52,12 +47,8 @@ class Allowances:
 class AddressRecord:
     """A name, and every address it answers with.
 
-    Several addresses on one name is an ordinary answer, not a conflict: the
-    client picks. Which of them it can actually reach is not ours to guess.
-
     A container's aliases are records of this kind too, rather than something
-    pointing at its name. Docker's own resolver answers them the same way, and
-    a name whose only job is to route does not need a canonical one behind it.
+    pointing at its name: docker's own resolver answers them the same way.
     """
 
     name: str

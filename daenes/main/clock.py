@@ -2,7 +2,7 @@ import time
 
 
 class SystemClock:
-    """The real clock, the only Clock a running deployment ever uses."""
+    """The real clock, which only a running deployment uses."""
 
     def sleep(self, duration: float) -> None:
         time.sleep(duration)

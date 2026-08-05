@@ -80,8 +80,7 @@ def test_an_unusable_log_level_falls_back_to_info(monkeypatch, requested):
 def test_the_application_is_wired_from_the_configuration(tmp_path):
     """Whether the parts fit together is only shown by running them.
 
-    Every one of them is stubbed out everywhere else, so this is the one place
-    the docker adapter, the synchronizer and the zone files meet.
+    Everywhere else they are stubbed out, so this is where they meet.
     """
     client = cast(
         DockerClient,

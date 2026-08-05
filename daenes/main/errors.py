@@ -11,8 +11,8 @@ class ReturnCodes(IntEnum):
 
 
 class RetryableError(Exception):
-    """Raised for a failure the next turn of the loop may well not hit.
+    """Raised for a failure the next turn of the loop may not hit.
 
-    Docker restarting is the case this exists for: the deployment is fine, and
-    taking the container down over it would be worse than waiting.
+    Docker restarting is the case it exists for: waiting beats taking the
+    container down over it.
     """

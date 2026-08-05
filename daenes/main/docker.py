@@ -15,14 +15,12 @@ from .model import IpAddress, LocalDomain, PublishedNetwork
 DOMAIN_LABEL = "daenes.domain"
 ENABLED_LABEL = "daenes.enabled"
 
-# The keys docker answers a container's addresses on a network with. Both may
-# be empty: a container gets the second one only on a network carrying IPv6.
+# Where docker puts a container's addresses on a network. Either may be empty:
+# the second one only exists on a network carrying IPv6.
 ADDRESS_KEYS = ("IPAddress", "GlobalIPv6Address")
 
-# Docker-py answers a name of None for a container or a network it read only in
-# part. Everything here is read in full, so the casts below say what its
-# unannotated source cannot, and nothing stands in for a name docker never
-# failed to give.
+# Docker-py answers no name for an object it read only in part. Everything here
+# is read in full, hence the casts below.
 
 
 class DockerUnreachable(RetryableError):
@@ -44,11 +42,10 @@ class DockerStartupError(Exception):
 
 
 def connect() -> DockerClient:
-    """Connect to the docker daemon, and make sure it is really answering.
+    """Connect to the docker daemon, and ping it.
 
-    Creating a client proves nothing on its own, so the daemon is pinged here:
-    a socket that was never mounted is a mistake in the deployment, and saying
-    so at startup beats failing on the first turn of the loop.
+    Creating a client proves nothing on its own, and a socket that was never
+    mounted is worth saying at startup rather than on the first turn of the loop.
     """
     try:
         client = DockerClient.from_env()
@@ -62,8 +59,8 @@ def connect() -> DockerClient:
 class DockerDomainSource:
     """The deployment, seen through the docker API.
 
-    Reports what docker says and judges none of it: which of these names can
-    be served is decided where the zone is built.
+    Reports what docker says and judges none of it: which of these names can be
+    served is decided where the zone is built.
     """
 
     def __init__(self, client: DockerClient) -> None:
@@ -97,9 +94,8 @@ class DockerDomainSource:
     def _get_labelled_networks(self) -> list[Network]:
         """The networks a daenes.domain label asks to publish.
 
-        One listing, filtered here rather than by the daemon, so that a network
-        left with nothing but the daenes.enabled label of earlier versions can
-        be reported instead of passed over in silence.
+        Filtered here rather than by the daemon, so that a network left with
+        only the daenes.enabled label of earlier versions can be reported.
         """
         published: list[Network] = []
         for network in self._client.networks.list():
@@ -108,13 +104,11 @@ class DockerDomainSource:
                 published.append(network)
             elif ENABLED_LABEL in labels:
                 logging.warning(
-                    "Ignoring network %s: it carries a %s label but no %s label. "
-                    "Since daenes 1.0.0 a network is published by naming the zone "
-                    "it publishes, for instance %s=services.internal",
+                    "Ignoring network %s: since daenes 1.0.0 a network is "
+                    "published by %s=<domain>, not by %s",
                     network.name,
+                    DOMAIN_LABEL,
                     ENABLED_LABEL,
-                    DOMAIN_LABEL,
-                    DOMAIN_LABEL,
                 )
         return published
 
@@ -151,20 +145,12 @@ def _get_labels(network: Network) -> dict[str, str]:
 
 
 def _is_enabled(container: Container) -> bool:
-    """Whether a container on a published network wants to be published.
-
-    Containers are in by default, which is the whole point of reading a
-    deployment rather than being told about it, and opt out explicitly.
-    """
+    """Whether a container wants publishing, which it does unless it says no."""
     return container.labels.get(ENABLED_LABEL, "true") == "true"
 
 
 def _get_name(container: Container) -> str:
-    """The name a container asks for, its own unless a label says otherwise.
-
-    An empty label says nothing, and falls through to the container's name the
-    same way a missing one does.
-    """
+    """The name a container asks for: its label, or its own name without one."""
     return container.labels.get(DOMAIN_LABEL) or cast(str, container.name)
 
 

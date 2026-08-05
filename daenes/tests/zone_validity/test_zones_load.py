@@ -95,9 +95,8 @@ def test_a_zone_of_many_containers_loads(checker, tmp_path):
 def test_the_checker_refuses_a_zone_that_could_not_load(checker, tmp_path):
     """Proof that the checker is checking, and the suite above worth running.
 
-    An underscore is what docker puts in the name it gives a compose network,
-    and the reason the name rules exist: a server refuses the whole zone over
-    one owner name no host may bear.
+    An underscore is what the name rules exist for: one owner name no host may
+    bear costs the whole zone.
     """
     path = tmp_path / f"{ORIGIN}.zone"
     path.write_text(

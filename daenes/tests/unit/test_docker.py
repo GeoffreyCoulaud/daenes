@@ -1,7 +1,7 @@
 """Unit tests for daenes.main.docker.
 
-What these fakes answer is what docker's own inspect endpoints answer, down to
-the null labels and the empty address of a container that is not running.
+The fakes answer what docker's inspect endpoints answer, down to the null
+labels and the empty address of a container that is not running.
 """
 
 from ipaddress import ip_address

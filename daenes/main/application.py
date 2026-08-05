@@ -6,10 +6,10 @@ from .zone_synchronizer import ZoneSynchronizer
 
 
 class Application:
-    """The lifecycle: synchronize, wait, and retry whatever is worth retrying.
+    """The lifecycle: synchronize, wait, retry what is worth retrying.
 
-    Anything a retry cannot fix is left to propagate, for the entry point to
-    turn into an exit code.
+    Anything a retry cannot fix propagates, for the entry point to turn into
+    an exit code.
     """
 
     def __init__(
