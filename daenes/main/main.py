@@ -10,6 +10,7 @@ from .application import Application
 from .clock import SystemClock
 from .config import Config, ConfigurationError, get_configuration
 from .docker import DockerDomainSource, DockerStartupError, connect
+from .docker_events import DockerChangeNotifier
 from .errors import ReturnCodes
 from .zone_files import FileSystemZoneStore
 from .zone_synchronizer import ZoneSynchronizer
@@ -57,9 +58,13 @@ def build_application(config: Config, client: DockerClient) -> Application:
             ttl=config.ttl,
             allowances=config.allowances,
         ),
+        # One client for both: the stream holds a connection of its pool open
+        # while the passes take others out of it.
+        notifier=DockerChangeNotifier(client=client),
         clock=SystemClock(),
         retry_interval=config.retry_interval,
-        success_interval=config.success_interval,
+        resync_interval=config.resync_interval,
+        settle_interval=config.settle_interval,
     )
 
 

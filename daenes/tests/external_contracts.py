@@ -30,3 +30,9 @@ DNS_NAMES_KEY = "DNSNames"
 
 # What docker puts in an address key it has no address for.
 NO_ADDRESS = ""
+
+# What an event says it is about, and what happened to it. Read by the contract
+# tests alone: daenes has the daemon filter its stream, so nothing in
+# `daenes.main` ever opens an event to look inside.
+EVENT_TYPE_KEY = "Type"
+EVENT_ACTION_KEY = "Action"

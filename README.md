@@ -61,6 +61,8 @@ www IN A 172.27.0.2
 
 Point your DNS server at the directory, and `www.services.internal` resolves.
 
+Daenes hears about a change from docker itself, over the same event stream `docker events` reads, so a container that comes up is published a moment later rather than on the next sweep. It reads the whole deployment again anyway, every `RESYNC_INTERVAL_SECONDS`, so nothing rests on having heard every word.
+
 Docker is the only supported way to run daenes, and the daemon it reads has to be **docker 25.0 or newer**: that is the version that started telling clients the names it answers for a container. Daenes says so and stops if it finds an older one.
 
 This example is ready to run in [`examples/readme`](examples/readme).
@@ -87,9 +89,10 @@ Nothing names a container here: docker already does, through its name, its hostn
 |---|---|---|
 | `DNS_IP` | none, required | The address of the DNS server serving these zones, written into each one as its `ns` record |
 | `ZONES_DIR` | `/zones` | Where the zone files are written |
-| `DNS_TTL` | `60` | How long records may be cached, in seconds. Zero tells resolvers not to. |
-| `SUCCESS_INTERVAL` | `60` | Seconds between two passes over the deployment |
-| `RETRY_INTERVAL` | `10` | Seconds before trying again after a failure |
+| `DNS_TTL_SECONDS` | `60` | How long records may be cached. Zero tells resolvers not to. |
+| `RESYNC_INTERVAL_SECONDS` | `60` | The longest daenes goes without reading the deployment. It normally reads it because docker said something changed, well before this runs out. |
+| `SETTLE_INTERVAL_MILLIS` | `200` | How long a deployment that is moving is left to finish moving before its zone is written. Zero publishes every state it passes through. |
+| `RETRY_INTERVAL_SECONDS` | `10` | Seconds before trying again after a failure |
 | `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL` |
 | `ALLOW_MULTIPLE_ADDRESSES_PER_NAME` | `false` | See [sharing](#sharing-a-name-or-a-zone). Reads `true` or `false`, and nothing else. |
 | `ALLOW_MULTIPLE_NETWORKS_PER_ZONE` | `false` | See [sharing](#sharing-a-name-or-a-zone). Reads `true` or `false`, and nothing else. |
@@ -167,7 +170,8 @@ front). Set ALLOW_MULTIPLE_NETWORKS_PER_ZONE to true to merge them
 - **A network is published by naming its domain.** `daenes.enabled=true` on a network no longer publishes anything: replace it with `daenes.domain=<the domain you want>`, and daenes reports the ones left behind. The domain used to be guessed from the network's name, which docker prefixes with the compose project name and an underscore, and no DNS server would load the zone that came out of it.
 - **`daenes.domain` on a container does nothing.** It used to replace the container's name; a [network alias](https://docs.docker.com/reference/compose-file/services/#aliases) adds one, which is the same thing said in docker's own terms. Containers keep answering at their name and at every alias they have.
 - **A container's `hostname` is published too**, along with everything else docker resolves it by. This is what asks for docker 25.0 or newer.
-- **`INTERVAL` is now `SUCCESS_INTERVAL`.**
+- **Changes are published as docker announces them**, rather than on the next sweep. `INTERVAL` is now `RESYNC_INTERVAL_SECONDS`, and says something else with it: not how often daenes reads the deployment, but the longest it will go without reading it.
+- **`DNS_TTL` is now `DNS_TTL_SECONDS`**, and every other duration says its unit too.
 - **`LOG_LEVEL` defaults to `INFO`**, where the image used to set `DEBUG`.
 - **Sharing a name or a zone is refused** unless one of the two settings above says otherwise. Both used to happen silently.
 - Zone files written under the old naming are left where they are. Delete the ones you no longer publish.

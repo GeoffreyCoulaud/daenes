@@ -8,10 +8,12 @@ import pytest
 from daenes.main.config import (
     DEFAULT_ALLOW_MULTIPLE_ADDRESSES_PER_NAME,
     DEFAULT_ALLOW_MULTIPLE_NETWORKS_PER_ZONE,
+    DEFAULT_RESYNC_INTERVAL,
     DEFAULT_RETRY_INTERVAL,
-    DEFAULT_SUCCESS_INTERVAL,
+    DEFAULT_SETTLE_INTERVAL_MILLIS,
     DEFAULT_TTL,
     DEFAULT_ZONES_DIRECTORY,
+    MILLIS_PER_SECOND,
     ConfigurationError,
     get_configuration,
 )
@@ -26,10 +28,11 @@ def clean_environment(monkeypatch):
     """Start from an environment holding nothing daenes reads."""
     for name in (
         "DNS_IP",
-        "DNS_TTL",
+        "DNS_TTL_SECONDS",
         "ZONES_DIR",
-        "SUCCESS_INTERVAL",
-        "RETRY_INTERVAL",
+        "RESYNC_INTERVAL_SECONDS",
+        "RETRY_INTERVAL_SECONDS",
+        "SETTLE_INTERVAL_MILLIS",
         "ALLOW_MULTIPLE_ADDRESSES_PER_NAME",
         "ALLOW_MULTIPLE_NETWORKS_PER_ZONE",
     ):
@@ -49,8 +52,9 @@ def test_an_environment_naming_only_the_dns_server_is_enough():
     assert config.nameserver_address == ip_address("10.0.0.53")
     assert config.zones_directory == Path(DEFAULT_ZONES_DIRECTORY)
     assert config.ttl == DEFAULT_TTL
-    assert config.success_interval == DEFAULT_SUCCESS_INTERVAL
+    assert config.resync_interval == DEFAULT_RESYNC_INTERVAL
     assert config.retry_interval == DEFAULT_RETRY_INTERVAL
+    assert config.settle_interval == DEFAULT_SETTLE_INTERVAL_MILLIS / MILLIS_PER_SECOND
     assert config.allowances.multiple_addresses_per_name == (
         DEFAULT_ALLOW_MULTIPLE_ADDRESSES_PER_NAME
     )
@@ -62,9 +66,10 @@ def test_an_environment_naming_only_the_dns_server_is_enough():
 @pytest.mark.usefixtures("valid_environment")
 def test_every_setting_can_be_chosen(monkeypatch):
     monkeypatch.setenv("ZONES_DIR", "/var/lib/daenes")
-    monkeypatch.setenv("DNS_TTL", "300")
-    monkeypatch.setenv("SUCCESS_INTERVAL", "120")
-    monkeypatch.setenv("RETRY_INTERVAL", "5")
+    monkeypatch.setenv("DNS_TTL_SECONDS", "300")
+    monkeypatch.setenv("RESYNC_INTERVAL_SECONDS", "120")
+    monkeypatch.setenv("RETRY_INTERVAL_SECONDS", "5")
+    monkeypatch.setenv("SETTLE_INTERVAL_MILLIS", "500")
     monkeypatch.setenv("ALLOW_MULTIPLE_ADDRESSES_PER_NAME", "true")
     monkeypatch.setenv("ALLOW_MULTIPLE_NETWORKS_PER_ZONE", "true")
 
@@ -72,8 +77,10 @@ def test_every_setting_can_be_chosen(monkeypatch):
 
     assert config.zones_directory == Path("/var/lib/daenes")
     assert config.ttl == 300
-    assert config.success_interval == 120
+    assert config.resync_interval == 120
     assert config.retry_interval == 5
+    # Asked for in milliseconds, and waited out in seconds.
+    assert config.settle_interval == 0.5
     assert config.allowances.multiple_addresses_per_name is True
     assert config.allowances.multiple_networks_per_zone is True
 
@@ -106,13 +113,21 @@ def test_a_dns_server_may_answer_over_ipv6(monkeypatch):
 @pytest.mark.parametrize(
     "name, value",
     [
-        ("DNS_TTL", "a while"),
-        ("DNS_TTL", "-1"),
-        ("SUCCESS_INTERVAL", "1.5"),
-        ("SUCCESS_INTERVAL", "0"),
-        ("RETRY_INTERVAL", "0"),
+        ("DNS_TTL_SECONDS", "a while"),
+        ("DNS_TTL_SECONDS", "-1"),
+        ("RESYNC_INTERVAL_SECONDS", "1.5"),
+        ("RESYNC_INTERVAL_SECONDS", "0"),
+        ("RETRY_INTERVAL_SECONDS", "0"),
+        ("SETTLE_INTERVAL_MILLIS", "-1"),
     ],
-    ids=["not_a_number", "negative_ttl", "not_whole", "no_wait", "no_retry_wait"],
+    ids=[
+        "not_a_number",
+        "negative_ttl",
+        "not_whole",
+        "no_wait",
+        "no_retry_wait",
+        "negative_settle",
+    ],
 )
 def test_a_duration_that_makes_no_sense_stops(monkeypatch, name, value):
     """Retrying cannot fix it, and guessing what was meant would be worse."""
@@ -127,9 +142,17 @@ def test_a_duration_that_makes_no_sense_stops(monkeypatch, name, value):
 @pytest.mark.usefixtures("valid_environment")
 def test_a_ttl_of_zero_tells_resolvers_not_to_cache(monkeypatch):
     """Zero is a legal TTL, unlike the intervals daenes itself waits out."""
-    monkeypatch.setenv("DNS_TTL", "0")
+    monkeypatch.setenv("DNS_TTL_SECONDS", "0")
 
     assert get_configuration().ttl == 0
+
+
+@pytest.mark.usefixtures("valid_environment")
+def test_a_settle_of_zero_publishes_every_state_a_deployment_passes_through(monkeypatch):
+    """Legal too, and the only way to watch a deployment come up as it does."""
+    monkeypatch.setenv("SETTLE_INTERVAL_MILLIS", "0")
+
+    assert get_configuration().settle_interval == 0
 
 
 @pytest.mark.usefixtures("valid_environment")
