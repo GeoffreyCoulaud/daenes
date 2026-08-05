@@ -3,7 +3,7 @@ networks:
   # This network is watched, because it names the domain it publishes.
   services:
     labels:
-      - daenes.domain=mysuperservices.internal
+      - daenes.domain=services.internal
 
   # This one too, under another domain.
   admin-services:
@@ -23,10 +23,10 @@ services:
       # Directory where the zone files will be written
       - ./zones:/zones
     environment:
-      # Change this IP at your discretion
-      - DNS_IP=0.0.0.0
+      # The address of the DNS server that will serve these zones
+      - DNS_IP=10.0.0.53
 
-  # This container answers at www.mysuperservices.internal and at
+  # This container answers at www.services.internal and at
   # www.admin.internal, each with its address on the network in question.
   httpd:
     container_name: www

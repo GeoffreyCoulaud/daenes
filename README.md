@@ -1,176 +1,26 @@
 # Daenes
 
-A simple solution for local DNS from docker labels.  
-Watches docker containers for specific labels and sets entries for local DNS server accordingly, like traefik does for proxying.
+Local DNS from docker labels.  
+Daenes watches your networks and containers and writes the zone files a DNS server serves, the way traefik watches them and routes.
 
-## Installation
+## What it does
 
-The only supported installation method is using docker.
-See the [example docker compose](#example-docker-compose) section for more information.
-
-## Configuration
-
-### Docker labels for networks
-
-<table>
-  <thead>
-    <tr>
-      <th>Label</th>
-      <th>Default</th>
-      <th>Description</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code>daenes.domain</code></td>
-      <td>None, required</td>
-      <td>
-        The domain of the zone this network publishes, for instance
-        <code>services.internal</code>.<br>
-        A network without this label is left alone entirely.<br>
-        It has to be a domain of at least two labels, made of letters, digits
-        and hyphens. Two networks may name the same domain, which merges them
-        into one zone, and has to be
-        <a href="#when-several-networks-name-one-zone">asked for</a>.
-      </td>
-    </tr>
-  </tbody>
-</table>
-
-### Docker labels for containers
-
-<table>
-  <thead>
-    <tr>
-      <th>Label</th>
-      <th>Default</th>
-      <th>Description</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code>daenes.domain</code></td>
-      <td>The container's name</td>
-      <td>The subdomain to assign to this container inside its network's zone</td>
-    </tr>
-    <tr>
-      <td><code>daenes.enabled</code></td>
-      <td><code>true</code></td>
-      <td>
-        Whether to include the container.<br/>
-        Some precisions : 
-        <ul>
-          <li>Containers are included if on a published network</li>
-          <li>Containers are included by default, even with no <code>daenes.*</code> label</li>
-          <li>Containers can be excluded explicitly by using this label</li>
-        </ul>
-      </td>
-    </tr>
-  </tbody>
-</table>
-
-### Environment variables
-
-<table>
-  <thead>
-    <tr>
-      <th>Name</th>
-      <th>Default</th>
-      <th>Optional</th>
-      <th>Description</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code>DNS_IP</code></td>
-      <td></td>
-      <td>Mandatory</td>
-      <td>The IP address of the local DNS server to write inside of the zone files</td>
-    </tr>
-    <tr>
-      <td><code>LOG_LEVEL</code></td>
-      <td><code>INFO</code></td>
-      <td>Optional</td>
-      <td>
-        Logs verbosity, available values are
-        <code>DEBUG</code>,
-        <code>INFO</code>,
-        <code>WARNING</code>,
-        <code>ERROR</code> and
-        <code>CRITICAL</code>
-      </td>
-    </tr>
-    <tr>
-      <td><code>SUCCESS_INTERVAL</code></td>
-      <td><code>60</code></td>
-      <td>Optional</td>
-      <td>Sleep interval between refreshes, in seconds</td>
-    </tr>
-    <tr>
-      <td><code>RETRY_INTERVAL</code></td>
-      <td><code>10</code></td>
-      <td>Optional</td>
-      <td>Sleep interval before trying again after a failure, in seconds</td>
-    </tr>
-    <tr>
-      <td><code>DNS_TTL</code></td>
-      <td><code>60</code></td>
-      <td>Optional</td>
-      <td>Time to live for DNS entries, in seconds. Zero tells resolvers not to cache them</td>
-    </tr>
-    <tr>
-      <td><code>ZONES_DIR</code></td>
-      <td><code>/zones</code></td>
-      <td>Optional</td>
-      <td>Directory the zone files are written into</td>
-    </tr>
-    <tr>
-      <td><code>ALLOW_MULTIPLE_ADDRESSES_PER_NAME</code></td>
-      <td><code>false</code></td>
-      <td>Optional</td>
-      <td>
-        Whether one name may answer with several addresses of one family.<br>
-        See <a href="#when-one-name-would-answer-for-several-containers">below</a>.
-        Accepts <code>true</code> and <code>false</code>, and nothing else.
-      </td>
-    </tr>
-    <tr>
-      <td><code>ALLOW_MULTIPLE_NETWORKS_PER_ZONE</code></td>
-      <td><code>false</code></td>
-      <td>Optional</td>
-      <td>
-        Whether several networks may name the same domain, merging their
-        containers into one zone.<br>
-        See <a href="#when-several-networks-name-one-zone">below</a>.
-        Accepts <code>true</code> and <code>false</code>, and nothing else.
-      </td>
-    </tr>
-  </tbody>
-</table>
-
-### Volumes
-
-The docker socket has to be mounted at `/var/run/docker.sock`: it is how daenes discovers networks and containers.
-
-The zone files are written into `/zones`.  
-Mounting a directory or docker volume there is the recommended way to access the zone files.
-
-### Example docker compose
+Name a network, and everything on it gets a name under that domain:
 
 ```yml
 networks:
 
-  # This network is watched, because it names the domain it publishes.
+  # Watched, because it names the domain it publishes.
   services:
     labels:
       - daenes.domain=services.internal
 
-  # This one too, under another domain.
+  # Watched too, under another domain.
   admin-services:
     labels:
       - daenes.domain=admin.internal
 
-  # This network is not watched: it names no domain.
+  # Not watched: it names no domain.
   some-internal-network:
 
 services:
@@ -178,114 +28,134 @@ services:
   daenes:
     image: ghcr.io/geoffreycoulaud/daenes:latest
     volumes:
-      # The docker socket is needed to discover networks and containers
+      # Read the deployment through the docker socket
       - /var/run/docker.sock:/var/run/docker.sock
-      # Directory where the zone files will be written
+      # Write the zone files here
       - ./zones:/zones
     environment:
-      # Change this IP at your discretion
-      - DNS_IP=0.0.0.0
+      # The address of the DNS server that will serve these zones
+      - DNS_IP=10.0.0.53
 
-  # This container answers at www.services.internal and at www.admin.internal,
-  # each with its address on the network in question.
   httpd:
     container_name: www
     image: httpd:latest
-    ports:
-      - "80:80"
     networks:
-      # The name comes from the container, the domain from the network.
-      services:
-      # Same thing here, to show that a container may have several domains,
-      # each pointing at its own address on the network it belongs to.
-      admin-services:
+      - services
+      - admin-services
 ```
 
-A ready to run version of this example lives in [`examples/readme`](examples/readme).
-
-## How domains are selected for containers
-
-On a given docker network, daenes assigns one or more names to a container following these rules.
-
-Its name:
-- If the `daenes.domain` label is set on the container, it is used
-- Otherwise the container's name is used, which is not the same as the compose service name
-
-Its aliases, each answering with the same addresses as the name above:
-- The compose service name, which docker makes an alias on every network
-- Whatever aliases the container has on the network
-
-The name and its aliases are then attached to the network's domain. An alias is published as an address rather than as a CNAME pointing at the name, which is what docker's own resolver answers as well. Each name therefore stands on its own: a container whose name cannot be served is still reached through the aliases that can.
-
-Names are lowercased, since DNS makes no difference between two spellings of one name. A name that could not be served is left out, with a line in the logs saying which and why:
-
-- A name is made of letters, digits and hyphens, without a hyphen at either end (RFC 1123). Underscores are out, and docker puts one in the name it gives a compose network.
-- A label may be 63 characters long, and a whole name 253 (RFC 1035).
-- `ns` belongs to the zone's own nameserver, the one its NS record points at.
-
-A container answers over whichever families its network carries: A on an IPv4 network, A and AAAA on a dual stack one, AAAA alone on a network created with `--ipv4=false`.
-
-A published network with nothing left on it still gets a zone, holding its nameserver alone, so the names that used to be there stop resolving. A zone is only rewritten when something in it changed, so its serial stays put as long as the deployment does.
-
-### When one name would answer for several containers
-
-A client handed several addresses of one kind reaches whichever it picks, and only one of them may be the one it can actually reach. Since docker gives a container one address per family and per network, that only happens when two containers claim one name, or when one container sits on two networks of the same zone.
-
-By default daenes refuses to publish such a name at all, and says which addresses and which containers made it do so:
+Out comes `zones/services.internal.zone`, rewritten whenever the deployment changes:
 
 ```
-Ignoring the name 'api' entirely: it answers at 172.20.0.2, 172.21.0.4, from
-3ac191d7efba, 6fe54c612028, and a client would reach whichever of those it is
-handed. Set ALLOW_MULTIPLE_ADDRESSES_PER_NAME to true to publish them all
+; Generated by daenes, do not edit: it is rewritten on every change.
+$ORIGIN services.internal.
+$TTL 60
+@ IN SOA ns admin 1 3600 600 604800 600
+@ IN NS ns
+httpd IN A 172.27.0.2
+ns IN A 10.0.0.53
+www IN A 172.27.0.2
 ```
 
-Setting `ALLOW_MULTIPLE_ADDRESSES_PER_NAME=true` publishes every address instead, without a word, which is the answer docker's own resolver gives. It is a deliberate use: round-robin between containers that really are interchangeable.
+`www` is the container's name, `httpd` its compose service name: both answer with the address it has on that network. And since the container is on two published networks, `zones/admin.internal.zone` says the same thing with the address it has on the other one.
 
-A container answering over both families is never concerned: an A and an AAAA are one host over two protocols, not a choice between two hosts.
+Point your DNS server at the directory, and `www.services.internal` resolves.
 
-The usual way to arrive at it is a name that is one container's name and another's alias. Since aliases are published as addresses, `api` below answers with the addresses of both containers:
+Docker is the only supported way to run daenes. This example is ready to run in [`examples/readme`](examples/readme).
+
+## Configuration
+
+### Network labels
+
+| Label | Default | Description |
+|---|---|---|
+| `daenes.domain` | none, required | The zone this network publishes, for instance `services.internal`. A network without it is left alone entirely. At least two labels, of letters, digits and hyphens. Two networks may name the same zone, once [asked to](#sharing-a-name-or-a-zone). |
+
+### Container labels
+
+| Label | Default | Description |
+|---|---|---|
+| `daenes.domain` | the container's name | The name this container answers to inside its network's zone |
+| `daenes.enabled` | `true` | Set it to `false` to leave a container out. Containers on a published network are in by default, with or without a `daenes.*` label. |
+
+### Environment variables
+
+| Name | Default | Description |
+|---|---|---|
+| `DNS_IP` | none, required | The address of the DNS server serving these zones, written into each one as its `ns` record |
+| `ZONES_DIR` | `/zones` | Where the zone files are written |
+| `DNS_TTL` | `60` | How long records may be cached, in seconds. Zero tells resolvers not to. |
+| `SUCCESS_INTERVAL` | `60` | Seconds between two passes over the deployment |
+| `RETRY_INTERVAL` | `10` | Seconds before trying again after a failure |
+| `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL` |
+| `ALLOW_MULTIPLE_ADDRESSES_PER_NAME` | `false` | See [sharing](#sharing-a-name-or-a-zone). Reads `true` or `false`, and nothing else. |
+| `ALLOW_MULTIPLE_NETWORKS_PER_ZONE` | `false` | See [sharing](#sharing-a-name-or-a-zone). Reads `true` or `false`, and nothing else. |
+
+### Volumes
+
+`/var/run/docker.sock` is how daenes reads the deployment, and `/zones` is where it writes. Mount a directory or a docker volume over the second one to reach the files.
+
+## How names are chosen
+
+Every way docker names a container becomes a name in its network's zone, `services.internal` in the example above:
+
+| In the deployment | Answers at |
+|---|---|
+| `container_name: www` | `www.services.internal` |
+| the compose service name, `httpd` | `httpd.services.internal` |
+| a [network alias](https://docs.docker.com/reference/compose-file/services/#aliases), `front` | `front.services.internal` |
+| `daenes.domain=api` on the container | `api.services.internal`, in place of the container name |
+
+Each is an address record of its own rather than an alias pointing at one canonical name, which is how docker's own resolver answers them too. A container whose name cannot be served is therefore still reached through the ones that can.
+
+Addresses follow the network: A on an IPv4 network, A and AAAA on a [dual stack](https://docs.docker.com/engine/daemon/ipv6/) one, AAAA alone with `--ipv4=false`. A container on several published networks lands in each zone, with the address it has there.
+
+An emptied network keeps its zone, holding the nameserver alone, so names that are gone stop resolving. A zone is rewritten only when it changed, so its serial holds still as long as the deployment does.
+
+### Names daenes leaves out
+
+Names are lowercased, since DNS ignores case. What no host may bear is left out, with a line in the logs saying which and why:
+
+- letters, digits and hyphens, none at either end ([RFC 1123](https://datatracker.ietf.org/doc/html/rfc1123#section-2.1)), which rules out the underscore docker puts in the name it gives a compose network
+- 63 characters per label, 253 for the whole name ([RFC 1035](https://datatracker.ietf.org/doc/html/rfc1035#section-2.3.4))
+- `ns`, which belongs to the zone's own nameserver
+
+### Sharing a name or a zone
+
+Two things a deployment falls into more often than it asks for. Daenes refuses both by default, with a line saying what to do about it.
+
+**One name, several containers.** Whoever asks is handed several addresses and reaches whichever it picks, though only one of them may be reachable. The usual way in is a name that is one container's and another's alias:
 
 ```yml
 services:
-  api:            # its compose service name is an alias on the network
+  api:                     # compose makes this name an alias on the network
     image: some/api
   legacy-api:
-    container_name: api   # the same name, another container
+    container_name: api    # the same name, another container
     image: some/legacy
 ```
 
-Give one of them a `daenes.domain` label of its own if the collision was not intended, or turn the setting on if it was.
+```
+Ignoring the name 'api' entirely: it answers at 172.20.0.2, 172.21.0.4, from
+3ac191d7efba, 6fe54c612028. Set ALLOW_MULTIPLE_ADDRESSES_PER_NAME to true to
+publish them all
+```
 
-### When several networks name one zone
+Rename one of them, or turn the setting on if round-robin between interchangeable containers is what you meant. Dual stack is never concerned: an A and an AAAA are one host over two protocols, not a choice between two.
 
-Two networks carrying the same `daenes.domain` merge their containers into a single zone. That changes what every name in it answers, not just the names that collide: a container on one network ends up answering for names that nothing on the other can reach.
-
-By default daenes writes no such zone at all, and names the networks asking for it:
+**One zone, several networks.** Two networks naming one domain merge into a single zone, which changes what every name in it answers, not only the ones that collide: a client resolves names it has no route to.
 
 ```
 Ignoring the zone 'services.internal' entirely: 2 networks ask for it (back,
-front), and a container on one of them would answer for names nothing on the
-others can reach. Set ALLOW_MULTIPLE_NETWORKS_PER_ZONE to true to merge them
+front). Set ALLOW_MULTIPLE_NETWORKS_PER_ZONE to true to merge them
 ```
-
-Setting `ALLOW_MULTIPLE_NETWORKS_PER_ZONE=true` merges them, which is a deliberate use: one zone covering a deployment split across several networks.
-
-```yml
-networks:
-  front:
-    labels: [daenes.domain=services.internal]
-  back:
-    labels: [daenes.domain=services.internal]   # deliberately the same zone
-```
-
-The two settings are independent. Merged networks make the case above more likely, since each network may hold a container of the same name, but two containers on one network can share an alias just as well.
 
 ## Upgrading from 0.2 to 1.0
 
-- **A network is now published by naming its domain.** `daenes.enabled=true` on a network no longer publishes anything: replace it with `daenes.domain=<the domain you want>`. A network left with the old label is reported in the logs. The domain used to be guessed from the network's name, which docker prefixes with the compose project name and an underscore, and no DNS server would load the zone that came out of it.
+- **A network is published by naming its domain.** `daenes.enabled=true` on a network no longer publishes anything: replace it with `daenes.domain=<the domain you want>`, and daenes reports the ones left behind. The domain used to be guessed from the network's name, which docker prefixes with the compose project name and an underscore, and no DNS server would load the zone that came out of it.
 - **`INTERVAL` is now `SUCCESS_INTERVAL`.**
-- **The image no longer sets `LOG_LEVEL` to `DEBUG`.** It defaults to `INFO`, and can be set back.
-- **Two networks naming one domain, and one name answering for several containers, are now refused** unless `ALLOW_MULTIPLE_NETWORKS_PER_ZONE` or `ALLOW_MULTIPLE_ADDRESSES_PER_NAME` says otherwise. Both used to be published silently.
+- **`LOG_LEVEL` defaults to `INFO`**, where the image used to set `DEBUG`.
+- **Sharing a name or a zone is refused** unless one of the two settings above says otherwise. Both used to happen silently.
 - Zone files written under the old naming are left where they are. Delete the ones you no longer publish.
 
 ## Contributing
