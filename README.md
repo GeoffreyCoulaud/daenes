@@ -29,8 +29,9 @@ See the [example docker compose](#example-docker-compose) section for more infor
         <code>services.internal</code>.<br>
         A network without this label is left alone entirely.<br>
         It has to be a domain of at least two labels, made of letters, digits
-        and hyphens. Two networks may name the same domain, in which case their
-        containers land in the same zone.
+        and hyphens. Two networks may name the same domain, which merges them
+        into one zone, and has to be
+        <a href="#when-several-networks-name-one-zone">asked for</a>.
       </td>
     </tr>
   </tbody>
@@ -124,13 +125,23 @@ See the [example docker compose](#example-docker-compose) section for more infor
       <td>Directory the zone files are written into</td>
     </tr>
     <tr>
-      <td><code>ALLOW_MULTIPLE_ADDRESSES</code></td>
+      <td><code>ALLOW_MULTIPLE_ADDRESSES_PER_NAME</code></td>
       <td><code>false</code></td>
       <td>Optional</td>
       <td>
-        Whether one name may answer with several addresses of one family,
-        which is an advanced use and easy to arrive at by accident.<br>
+        Whether one name may answer with several addresses of one family.<br>
         See <a href="#when-one-name-would-answer-for-several-containers">below</a>.
+        Accepts <code>true</code> and <code>false</code>, and nothing else.
+      </td>
+    </tr>
+    <tr>
+      <td><code>ALLOW_MULTIPLE_NETWORKS_PER_ZONE</code></td>
+      <td><code>false</code></td>
+      <td>Optional</td>
+      <td>
+        Whether several networks may name the same domain, merging their
+        containers into one zone.<br>
+        See <a href="#when-several-networks-name-one-zone">below</a>.
         Accepts <code>true</code> and <code>false</code>, and nothing else.
       </td>
     </tr>
@@ -225,26 +236,14 @@ By default daenes refuses to publish such a name at all, and says which addresse
 ```
 Ignoring the name 'api' entirely: it answers at 172.20.0.2, 172.21.0.4, from
 3ac191d7efba, 6fe54c612028, and a client would reach whichever of those it is
-handed. Set ALLOW_MULTIPLE_ADDRESSES to true to publish them all
+handed. Set ALLOW_MULTIPLE_ADDRESSES_PER_NAME to true to publish them all
 ```
 
-Setting `ALLOW_MULTIPLE_ADDRESSES=true` publishes every address instead, without a word, which is the answer docker's own resolver gives. It is a deliberate use: round-robin between containers that really are interchangeable.
+Setting `ALLOW_MULTIPLE_ADDRESSES_PER_NAME=true` publishes every address instead, without a word, which is the answer docker's own resolver gives. It is a deliberate use: round-robin between containers that really are interchangeable.
 
 A container answering over both families is never concerned: an A and an AAAA are one host over two protocols, not a choice between two hosts.
 
-Two ways to arrive at it:
-
-**Two networks naming the same domain.** Their containers land in one zone, which is what naming the same domain is for. If each network holds a container of the same name, that name now answers for both, and a client has no way of telling which one it will reach.
-
-```yml
-networks:
-  front:
-    labels: [daenes.domain=services.internal]
-  back:
-    labels: [daenes.domain=services.internal]   # deliberately the same zone
-```
-
-**A name that is one container's name and another's alias.** Since aliases are published as addresses, `api` below answers with the addresses of both containers.
+The usual way to arrive at it is a name that is one container's name and another's alias. Since aliases are published as addresses, `api` below answers with the addresses of both containers:
 
 ```yml
 services:
@@ -255,13 +254,38 @@ services:
     image: some/legacy
 ```
 
-In both cases, give one of the containers a `daenes.domain` label of its own if the collision was not intended, or turn `ALLOW_MULTIPLE_ADDRESSES` on if it was.
+Give one of them a `daenes.domain` label of its own if the collision was not intended, or turn the setting on if it was.
+
+### When several networks name one zone
+
+Two networks carrying the same `daenes.domain` merge their containers into a single zone. That changes what every name in it answers, not just the names that collide: a container on one network ends up answering for names that nothing on the other can reach.
+
+By default daenes writes no such zone at all, and names the networks asking for it:
+
+```
+Ignoring the zone 'services.internal' entirely: 2 networks ask for it (back,
+front), and a container on one of them would answer for names nothing on the
+others can reach. Set ALLOW_MULTIPLE_NETWORKS_PER_ZONE to true to merge them
+```
+
+Setting `ALLOW_MULTIPLE_NETWORKS_PER_ZONE=true` merges them, which is a deliberate use: one zone covering a deployment split across several networks.
+
+```yml
+networks:
+  front:
+    labels: [daenes.domain=services.internal]
+  back:
+    labels: [daenes.domain=services.internal]   # deliberately the same zone
+```
+
+The two settings are independent. Merged networks make the case above more likely, since each network may hold a container of the same name, but two containers on one network can share an alias just as well.
 
 ## Upgrading from 0.2 to 1.0
 
 - **A network is now published by naming its domain.** `daenes.enabled=true` on a network no longer publishes anything: replace it with `daenes.domain=<the domain you want>`. A network left with the old label is reported in the logs. The domain used to be guessed from the network's name, which docker prefixes with the compose project name and an underscore, and no DNS server would load the zone that came out of it.
 - **`INTERVAL` is now `SUCCESS_INTERVAL`.**
 - **The image no longer sets `LOG_LEVEL` to `DEBUG`.** It defaults to `INFO`, and can be set back.
+- **Two networks naming one domain, and one name answering for several containers, are now refused** unless `ALLOW_MULTIPLE_NETWORKS_PER_ZONE` or `ALLOW_MULTIPLE_ADDRESSES_PER_NAME` says otherwise. Both used to be published silently.
 - Zone files written under the old naming are left where they are. Delete the ones you no longer publish.
 
 ## Contributing

@@ -84,9 +84,10 @@ def make_domain(
 def make_published_network(
     *domains: LocalDomain,
     origin: str = ORIGIN,
+    name: str = "compose_services",
 ) -> PublishedNetwork:
     """One network asking for a zone, and the containers on it."""
-    return PublishedNetwork(origin=origin, domains=domains)
+    return PublishedNetwork(name=name, origin=origin, domains=domains)
 
 
 def make_network_settings(

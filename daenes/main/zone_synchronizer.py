@@ -3,7 +3,7 @@ from collections import Counter
 from collections.abc import Iterator
 
 from .dns_names import MAX_NAME_LENGTH, is_valid_name, normalize
-from .model import AddressRecord, IpAddress, LocalDomain, Zone
+from .model import AddressRecord, Allowances, IpAddress, LocalDomain, Zone
 from .ports import NetworkSource, ZoneStore
 
 # The zone's own nameserver and hostmaster, relative to its origin. A container
@@ -30,13 +30,13 @@ class ZoneSynchronizer:
         store: ZoneStore,
         nameserver_address: IpAddress,
         ttl: int,
-        allow_multiple_addresses: bool,
+        allowances: Allowances,
     ) -> None:
         self._source = source
         self._store = store
         self._nameserver_address = nameserver_address
         self._ttl = ttl
-        self._allow_multiple_addresses = allow_multiple_addresses
+        self._allowances = allowances
         # The last zone written for each origin, so an unchanged zone is left
         # alone rather than rewritten with a new serial, which every secondary
         # server would take for news. Only records can change while the process
@@ -54,21 +54,22 @@ class ZoneSynchronizer:
     def _group_by_origin(self) -> dict[str, list[LocalDomain]]:
         """Gather the containers by the zone they belong to.
 
-        Two docker networks may deliberately name the same origin, in which
-        case their containers land in the same zone.
+        Two docker networks naming one origin land in one zone, which the
+        deployment has to have asked for.
         """
-        grouped: dict[str, list[LocalDomain]] = {}
+        domains: dict[str, list[LocalDomain]] = {}
+        networks: dict[str, list[str]] = {}
         for network in self._source.get_published_networks():
             origin = normalize(network.origin)
-            grouped.setdefault(origin, []).extend(network.domains)
+            domains.setdefault(origin, []).extend(network.domains)
+            networks.setdefault(origin, []).append(network.name)
         return {
-            origin: domains
-            for origin, domains in grouped.items()
-            if self._is_servable_origin(origin)
+            origin: found
+            for origin, found in domains.items()
+            if self._is_servable_origin(origin, networks[origin])
         }
 
-    @staticmethod
-    def _is_servable_origin(origin: str) -> bool:
+    def _is_servable_origin(self, origin: str, networks: list[str]) -> bool:
         """Whether a zone may be built on this origin, saying why when not."""
         if not is_valid_name(origin):
             logging.error(
@@ -83,6 +84,17 @@ class ZoneSynchronizer:
                 "a domain needs more than one label, did you mean %s.internal?",
                 origin,
                 origin,
+            )
+            return False
+        if len(networks) > 1 and not self._allowances.multiple_networks_per_zone:
+            logging.warning(
+                "Ignoring the zone %r entirely: %d networks ask for it (%s), and "
+                "a container on one of them would answer for names nothing on "
+                "the others can reach. Set ALLOW_MULTIPLE_NETWORKS_PER_ZONE to "
+                "true to merge them",
+                origin,
+                len(networks),
+                ", ".join(sorted(networks)),
             )
             return False
         return True
@@ -133,7 +145,7 @@ class ZoneSynchronizer:
             for name in self._get_names(origin, domain):
                 addresses.setdefault(name, set()).update(domain.addresses)
                 containers.setdefault(name, set()).add(domain.container)
-        if not self._allow_multiple_addresses:
+        if not self._allowances.multiple_addresses_per_name:
             _drop_shared_names(addresses, containers)
         return tuple(
             AddressRecord(
@@ -210,7 +222,7 @@ def _drop_shared_names(
         logging.warning(
             "Ignoring the name %r entirely: it answers at %s, from %s, and a "
             "client would reach whichever of those it is handed. Set "
-            "ALLOW_MULTIPLE_ADDRESSES to true to publish them all",
+            "ALLOW_MULTIPLE_ADDRESSES_PER_NAME to true to publish them all",
             name,
             ", ".join(str(address) for address in sorted(found, key=_address_sort_key)),
             ", ".join(sorted(containers[name])),

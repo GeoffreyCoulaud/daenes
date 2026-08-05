@@ -4,15 +4,15 @@ from os import getenv
 from pathlib import Path
 
 from .errors import ReturnCodes
-from .model import IpAddress
+from .model import Allowances, IpAddress
 
 DEFAULT_ZONES_DIRECTORY = "/zones"
 DEFAULT_TTL = 60
 DEFAULT_SUCCESS_INTERVAL = 60
 DEFAULT_RETRY_INTERVAL = 10
-# Off unless asked for: a name answering with several addresses of one family
-# is something a deployment arrives at by accident more often than on purpose.
-DEFAULT_ALLOW_MULTIPLE_ADDRESSES = False
+# Both off unless asked for, see the Allowances they are read into.
+DEFAULT_ALLOW_MULTIPLE_ADDRESSES_PER_NAME = False
+DEFAULT_ALLOW_MULTIPLE_NETWORKS_PER_ZONE = False
 
 TRUE = "true"
 FALSE = "false"
@@ -37,7 +37,7 @@ class Config:
     ttl: int
     success_interval: int
     retry_interval: int
-    allow_multiple_addresses: bool
+    allowances: Allowances
 
 
 def _get_required(name: str) -> str:
@@ -110,7 +110,14 @@ def get_configuration() -> Config:
         retry_interval=_get_integer(
             "RETRY_INTERVAL", DEFAULT_RETRY_INTERVAL, minimum=1
         ),
-        allow_multiple_addresses=_get_boolean(
-            "ALLOW_MULTIPLE_ADDRESSES", DEFAULT_ALLOW_MULTIPLE_ADDRESSES
+        allowances=Allowances(
+            multiple_addresses_per_name=_get_boolean(
+                "ALLOW_MULTIPLE_ADDRESSES_PER_NAME",
+                DEFAULT_ALLOW_MULTIPLE_ADDRESSES_PER_NAME,
+            ),
+            multiple_networks_per_zone=_get_boolean(
+                "ALLOW_MULTIPLE_NETWORKS_PER_ZONE",
+                DEFAULT_ALLOW_MULTIPLE_NETWORKS_PER_ZONE,
+            ),
         ),
     )

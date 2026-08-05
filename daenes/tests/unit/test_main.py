@@ -15,6 +15,7 @@ from daenes.main.application import Application
 from daenes.main.config import Config
 from daenes.main.docker import DOMAIN_LABEL, DockerStartupError
 from daenes.main.errors import ReturnCodes
+from daenes.main.model import Allowances
 from daenes.main.main import (
     build_application,
     configure_logging,
@@ -36,7 +37,7 @@ CONFIG = Config(
     ttl=60,
     success_interval=60,
     retry_interval=10,
-    allow_multiple_addresses=False,
+    allowances=Allowances(),
 )
 
 

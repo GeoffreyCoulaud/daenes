@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Iterator
 from ipaddress import ip_address
-from typing import Any
+from typing import Any, cast
 
 from docker.client import DockerClient
 from docker.errors import DockerException
@@ -18,6 +18,11 @@ ENABLED_LABEL = "daenes.enabled"
 # The keys docker answers a container's addresses on a network with. Both may
 # be empty: a container gets the second one only on a network carrying IPv6.
 ADDRESS_KEYS = ("IPAddress", "GlobalIPv6Address")
+
+# Docker-py answers a name of None for a container or a network it read only in
+# part. Everything here is read in full, so the casts below say what its
+# unannotated source cannot, and nothing stands in for a name docker never
+# failed to give.
 
 
 class DockerUnreachable(RetryableError):
@@ -78,6 +83,7 @@ class DockerDomainSource:
             origin = _get_labels(network)[DOMAIN_LABEL]
             logging.debug("Network %s publishes zone %s", network.name, origin)
             yield PublishedNetwork(
+                name=cast(str, network.name),
                 origin=origin,
                 domains=tuple(self._get_local_domains(network)),
             )
@@ -156,12 +162,10 @@ def _is_enabled(container: Container) -> bool:
 def _get_name(container: Container) -> str:
     """The name a container asks for, its own unless a label says otherwise.
 
-    Docker names every container it answers a full inspect for, so the last
-    fallback stands for nothing it has ever said. It is there so that a
-    container arriving without a name would be left out by the name rules,
-    the way any other unservable name is, rather than taken for a crash.
+    An empty label says nothing, and falls through to the container's name the
+    same way a missing one does.
     """
-    return container.labels.get(DOMAIN_LABEL) or container.name or ""
+    return container.labels.get(DOMAIN_LABEL) or cast(str, container.name)
 
 
 def _get_addresses(settings: dict[str, Any]) -> Iterator[IpAddress]:

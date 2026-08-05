@@ -5,6 +5,7 @@ from ipaddress import ip_address
 import pytest
 
 from daenes.main.dns_names import MAX_NAME_LENGTH
+from daenes.main.model import Allowances
 from daenes.main.zone_synchronizer import (
     FIRST_SERIAL,
     NAMESERVER_NAME,
@@ -25,7 +26,17 @@ from .conftest import (
 )
 
 
-def make_synchronizer(networks, store=None, allow_multiple_addresses=False):
+# What a deployment gets without asking for anything, and the two things it
+# may ask for. Spelled out here so every test says which one it is about.
+NOTHING_ALLOWED = Allowances()
+MERGED_NETWORKS = Allowances(multiple_networks_per_zone=True)
+SHARED_NAMES = Allowances(
+    multiple_addresses_per_name=True,
+    multiple_networks_per_zone=True,
+)
+
+
+def make_synchronizer(networks, store=None, allowances=NOTHING_ALLOWED):
     """A synchronizer over a deployment and a store the test can look into."""
     source = FakeNetworkSource(tuple(networks))
     store = FakeZoneStore() if store is None else store
@@ -34,25 +45,21 @@ def make_synchronizer(networks, store=None, allow_multiple_addresses=False):
         store=store,
         nameserver_address=NAMESERVER_ADDRESS,
         ttl=TTL,
-        allow_multiple_addresses=allow_multiple_addresses,
+        allowances=allowances,
     )
     return synchronizer, source, store
 
 
-def synchronize(*networks, store=None, allow_multiple_addresses=False):
+def synchronize(*networks, store=None, allowances=NOTHING_ALLOWED):
     """Run one synchronization, and answer the zones it wrote."""
-    synchronizer, _, store = make_synchronizer(
-        networks, store, allow_multiple_addresses
-    )
+    synchronizer, _, store = make_synchronizer(networks, store, allowances)
     synchronizer.synchronize()
     return store.saved
 
 
-def synchronize_one(*networks, store=None, allow_multiple_addresses=False):
+def synchronize_one(*networks, store=None, allowances=NOTHING_ALLOWED):
     """Run one synchronization that is expected to write exactly one zone."""
-    saved = synchronize(
-        *networks, store=store, allow_multiple_addresses=allow_multiple_addresses
-    )
+    saved = synchronize(*networks, store=store, allowances=allowances)
     assert len(saved) == 1
     return saved[0]
 
@@ -82,11 +89,23 @@ def test_each_origin_becomes_its_own_zone():
     assert [zone.origin for zone in saved] == ["admin.internal", "services.internal"]
 
 
+def test_two_networks_naming_one_origin_are_refused_by_default(caplog):
+    """Merging changes what every name answers, so it is asked for explicitly."""
+    saved = synchronize(
+        make_published_network(make_domain(name="web"), name="front"),
+        make_published_network(make_domain(name="db"), name="back"),
+    )
+
+    assert saved == []
+    assert "back, front" in caplog.text
+
+
 def test_two_networks_naming_one_origin_land_in_one_zone():
-    """Naming the same domain twice is a deliberate way to merge two networks."""
+    """Merging them is a deliberate use, and has to be asked for."""
     zone = synchronize_one(
         make_published_network(make_domain(name="web", addresses=("172.20.0.2",))),
         make_published_network(make_domain(name="db", addresses=("172.21.0.2",))),
+        allowances=MERGED_NETWORKS,
     )
 
     assert addresses_of(zone, "web") == (ip_address("172.20.0.2"),)
@@ -98,6 +117,7 @@ def test_an_origin_is_matched_without_regard_to_case():
     zone = synchronize_one(
         make_published_network(make_domain(name="web"), origin="Services.Internal"),
         make_published_network(make_domain(name="db"), origin="services.internal"),
+        allowances=MERGED_NETWORKS,
     )
 
     assert zone.origin == "services.internal"
@@ -109,7 +129,7 @@ def test_a_container_reachable_at_several_addresses_answers_with_all_of_them():
     zone = synchronize_one(
         make_published_network(make_domain(name="web", addresses=("172.20.0.2",))),
         make_published_network(make_domain(name="web", addresses=("172.21.0.9",))),
-        allow_multiple_addresses=True,
+        allowances=SHARED_NAMES,
     )
 
     assert addresses_of(zone, "web") == (
@@ -122,9 +142,7 @@ def test_addresses_are_ordered_by_family_then_value():
     """The two families do not compare, and the output has to be stable."""
     domain = make_domain(name="web", addresses=("fd00::2", "172.20.0.9", "172.20.0.2"))
 
-    zone = synchronize_one(
-        make_published_network(domain), allow_multiple_addresses=True
-    )
+    zone = synchronize_one(make_published_network(domain), allowances=SHARED_NAMES)
 
     assert addresses_of(zone, "web") == (
         ip_address("172.20.0.2"),
@@ -161,7 +179,7 @@ def test_an_alias_of_a_container_on_two_networks_answers_with_both_addresses():
         make_published_network(
             make_domain(name="web", addresses=("172.21.0.2",), aliases=("www",))
         ),
-        allow_multiple_addresses=True,
+        allowances=SHARED_NAMES,
     )
 
     assert addresses_of(zone, "www") == (
@@ -202,6 +220,7 @@ def test_a_name_two_containers_claim_is_dropped(caplog):
         make_published_network(
             make_domain(name="web", addresses=("172.21.0.2",), container="two")
         ),
+        allowances=MERGED_NETWORKS,
     )
 
     assert addresses_of(zone, "web") is None
@@ -214,6 +233,7 @@ def test_a_container_on_two_networks_of_one_zone_is_dropped_too(caplog):
     zone = synchronize_one(
         make_published_network(make_domain(name="web", addresses=("172.20.0.2",))),
         make_published_network(make_domain(name="web", addresses=("172.21.0.2",))),
+        allowances=MERGED_NETWORKS,
     )
 
     assert addresses_of(zone, "web") is None
@@ -242,7 +262,7 @@ def test_several_addresses_may_be_asked_for(caplog):
         make_published_network(
             make_domain(name="web", addresses=("172.21.0.2",), container="two")
         ),
-        allow_multiple_addresses=True,
+        allowances=SHARED_NAMES,
     )
 
     assert addresses_of(zone, "web") == (
@@ -360,7 +380,9 @@ def test_a_changed_zone_is_written_again_with_a_new_serial():
     )
 
     synchronizer.synchronize()
-    source.networks.append(make_published_network(make_domain(name="db")))
+    source.networks[0] = make_published_network(
+        make_domain(name="web"), make_domain(name="db")
+    )
     synchronizer.synchronize()
 
     assert [zone.serial for zone in store.saved] == [1, 2]

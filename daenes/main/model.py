@@ -30,8 +30,22 @@ class PublishedNetwork:
     that used to be on it go on resolving would be worse than saying so.
     """
 
+    name: str
     origin: str
     domains: tuple[LocalDomain, ...]
+
+
+@dataclass(frozen=True)
+class Allowances:
+    """The ways of sharing a deployment has explicitly asked for.
+
+    Both are arrived at by accident more often than on purpose, and both make
+    what a client gets depend on which container or which network it happened
+    to reach. Off unless asked for: daenes refuses rather than guesses.
+    """
+
+    multiple_addresses_per_name: bool = False
+    multiple_networks_per_zone: bool = False
 
 
 @dataclass(frozen=True)

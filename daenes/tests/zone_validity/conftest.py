@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from daenes.main.model import LocalDomain, PublishedNetwork
+from daenes.main.model import Allowances, LocalDomain, PublishedNetwork
 from daenes.main.zone_files import FileSystemZoneStore
 from daenes.main.zone_synchronizer import ZoneSynchronizer
 
@@ -85,13 +85,18 @@ def write_zone(
             encoding="utf-8",
         )
     ZoneSynchronizer(
-        source=FrozenNetworkSource((PublishedNetwork(origin=origin, domains=domains),)),
+        source=FrozenNetworkSource(
+            (PublishedNetwork(name="compose_services", origin=origin, domains=domains),)
+        ),
         store=store,
         nameserver_address=NAMESERVER_ADDRESS,
         ttl=ttl,
-        # Always on here, since it is the setting that puts the most into a
-        # zone. What the other one writes is a subset of these records.
-        allow_multiple_addresses=True,
+        # Everything allowed here, since that is what puts the most into a
+        # zone. What a stricter deployment writes is a subset of these records.
+        allowances=Allowances(
+            multiple_addresses_per_name=True,
+            multiple_networks_per_zone=True,
+        ),
     ).synchronize()
     return directory / f"{origin}.zone"
 
