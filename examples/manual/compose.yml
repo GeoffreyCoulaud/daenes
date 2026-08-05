@@ -1,15 +1,20 @@
+# A deployment covering every rule daenes follows, to try it against a real
+# docker daemon. See CONTRIBUTING.md.
+#
+#   docker compose up --build
+#   cat zones/services.internal.zone
+
 networks:
-  
+
+  # Named after no domain, so nothing on it is published.
   some-basic-network:
 
   services:
     labels:
-      - daenes.enabled=true
       - daenes.domain=services.internal
-  
+
   admin-services:
     labels:
-      - daenes.enabled=true
       - daenes.domain=admin-services.internal
 
 services:
@@ -21,73 +26,72 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./zones:/zones
     environment:
-      - INTERVAL=30
+      - SUCCESS_INTERVAL=10
       - DNS_IP=0.0.0.0
+      - LOG_LEVEL=DEBUG
 
   web1:
-    container_name: INVISIBLE-OUT-OF-NETWORK
+    container_name: invisible-out-of-network
     image: httpd:latest
-    ports:
-      - "8181:80"
     volumes:
-      - ./sample-website:/usr/local/apache2/htdocs
+      - ../sample-website:/usr/local/apache2/htdocs
     networks:
       - some-basic-network
-    labels:
-      - daenes.enabled=true
 
   web2:
     container_name: included-simple
     image: httpd:latest
-    ports:
-      - "8282:80"
     volumes:
-      - ./sample-website:/usr/local/apache2/htdocs
+      - ../sample-website:/usr/local/apache2/htdocs
     networks:
       - services
 
   web3:
     container_name: should-be-renamed-by-label
     image: httpd:latest
-    ports:
-      - "8383:80"
     volumes:
-      - ./sample-website:/usr/local/apache2/htdocs
+      - ../sample-website:/usr/local/apache2/htdocs
     networks:
       - services
     labels:
       - daenes.domain=included-renamed-by-label
+
   web4:
-    container_name: INVISIBLE-EXPLICITLY-DISABLED
+    container_name: invisible-explicitly-disabled
     image: httpd:latest
-    ports:
-      - "8484:80"
     volumes:
-      - ./sample-website:/usr/local/apache2/htdocs
+      - ../sample-website:/usr/local/apache2/htdocs
     networks:
       - services
     labels:
       - daenes.enabled=false
 
+  # On both networks, so it lands in both zones with a different address in each.
   includes-multiple-networks-service-alias:
     container_name: included-multiple-networks
     image: httpd:latest
-    ports:
-      - "8585:80"
     volumes:
-      - ./sample-website:/usr/local/apache2/htdocs
+      - ../sample-website:/usr/local/apache2/htdocs
     networks:
       admin-services:
       services:
         aliases:
           - included-multiple-networks-alias
 
+  # No container_name, so compose names it after the project, and its name
+  # carries the hyphens compose puts there.
   web6:
-    hostname: included-renamed-by-hostname
     image: httpd:latest
-    ports:
-      - "8686:80"
     volumes:
-      - ./sample-website:/usr/local/apache2/htdocs
+      - ../sample-website:/usr/local/apache2/htdocs
+    networks:
+      - services
+
+  # Its name is not one a host may bear, so it is left out with a warning.
+  web7:
+    container_name: invisible_invalid_name
+    image: httpd:latest
+    volumes:
+      - ../sample-website:/usr/local/apache2/htdocs
     networks:
       - services

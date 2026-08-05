@@ -1,0 +1,18 @@
+name: Checks for pull requests towards main branch
+
+# Runs on pull_request, not pull_request_target: nothing here needs a secret,
+# so a pull request from a fork runs unattended with a read-only token and no
+# cache writes.
+on:
+  pull_request:
+    branches:
+      - "main"
+
+permissions: {}
+
+jobs:
+
+  check:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/check.yml

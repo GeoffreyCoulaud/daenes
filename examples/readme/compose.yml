@@ -1,19 +1,16 @@
 networks:
 
-  # This network is watched because it matches **at least** one of the conditions
-  # - It has daenes.enabled=true
-  # - It has a daenes domain explicitly set 
+  # This network is watched, because it names the domain it publishes.
   services:
     labels:
-      - daenes.enabled=true
       - daenes.domain=mysuperservices.internal
-  
-  # This network is also watched
+
+  # This one too, under another domain.
   admin-services:
     labels:
-      - daenes.enabled=true
+      - daenes.domain=admin.internal
 
-  # This network is not watched
+  # This network is not watched: it names no domain.
   some-internal-network:
 
 services:
@@ -29,8 +26,8 @@ services:
       # Change this IP at your discretion
       - DNS_IP=0.0.0.0
 
-  # This container will generate a zone entry at web.services.internal
-  # and web.admin-services.internal
+  # This container answers at www.mysuperservices.internal and at
+  # www.admin.internal, each with its address on the network in question.
   httpd:
     container_name: www
     image: httpd:latest
@@ -39,9 +36,8 @@ services:
     volumes:
       - ../sample-website:/usr/local/apache2/htdocs
     networks:
-      # The domain name is generated because the container is on the
-      # services network, which is watched by daenes.
+      # The name comes from the container, the domain from the network.
       services:
-      # Same thing here, to show that a container may have multiple domains
-      # all pointing at its correct IP on the appropriate network
+      # Same thing here, to show that a container may have several domains,
+      # each pointing at its own address on the network it belongs to.
       admin-services:
