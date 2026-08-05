@@ -1,0 +1,118 @@
+# A deployment covering every rule daenes follows, to try it against a real
+# docker daemon. See CONTRIBUTING.md.
+#
+#   docker compose up --build
+#   cat zones/services.internal.zone
+
+networks:
+
+  # Named after no domain, so nothing on it is published.
+  some-basic-network:
+
+  services:
+    labels:
+      - daenes.domain=services.internal
+
+  admin-services:
+    labels:
+      - daenes.domain=admin-services.internal
+
+services:
+
+  daenes:
+    build:
+      context: ../../
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./zones:/zones
+    environment:
+      - SUCCESS_INTERVAL=10
+      - DNS_IP=0.0.0.0
+      - LOG_LEVEL=DEBUG
+
+  web1:
+    container_name: invisible-out-of-network
+    image: httpd:latest
+    volumes:
+      - ../sample-website:/usr/local/apache2/htdocs
+    networks:
+      - some-basic-network
+
+  web2:
+    container_name: included-simple
+    image: httpd:latest
+    volumes:
+      - ../sample-website:/usr/local/apache2/htdocs
+    networks:
+      - services
+
+  # Answers at its own name and at the alias, both of them addresses.
+  web3:
+    container_name: included-with-an-alias
+    image: httpd:latest
+    volumes:
+      - ../sample-website:/usr/local/apache2/htdocs
+    networks:
+      services:
+        aliases:
+          - included-by-alias
+
+  web4:
+    container_name: invisible-explicitly-disabled
+    image: httpd:latest
+    volumes:
+      - ../sample-website:/usr/local/apache2/htdocs
+    networks:
+      - services
+    labels:
+      - daenes.enabled=false
+
+  # On both networks, so it lands in both zones with a different address in each.
+  includes-multiple-networks-service-alias:
+    container_name: included-multiple-networks
+    image: httpd:latest
+    volumes:
+      - ../sample-website:/usr/local/apache2/htdocs
+    networks:
+      admin-services:
+      services:
+        aliases:
+          - included-multiple-networks-alias
+
+  # No container_name, so compose names it after the project, and its name
+  # carries the hyphens compose puts there.
+  web6:
+    image: httpd:latest
+    volumes:
+      - ../sample-website:/usr/local/apache2/htdocs
+    networks:
+      - services
+
+  # Its name is not one a host may bear, so it is left out with a warning. The
+  # container still answers at web7, the alias compose gives it.
+  web7:
+    container_name: invisible_invalid_name
+    image: httpd:latest
+    volumes:
+      - ../sample-website:/usr/local/apache2/htdocs
+    networks:
+      - services
+
+  # Compose makes this service's name an alias on the network, and the
+  # container below claims the very same name. Neither is published under it,
+  # since a client would reach whichever it was handed. Set
+  # ALLOW_MULTIPLE_ADDRESSES_PER_NAME to true above to see both published instead.
+  shared-name:
+    image: httpd:latest
+    volumes:
+      - ../sample-website:/usr/local/apache2/htdocs
+    networks:
+      - services
+
+  web8:
+    container_name: shared-name
+    image: httpd:latest
+    volumes:
+      - ../sample-website:/usr/local/apache2/htdocs
+    networks:
+      - services

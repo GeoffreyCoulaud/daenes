@@ -1,1 +1,9 @@
 .venv
+.vscode
+__pycache__
+.coverage
+coverage.xml
+htmlcov/
+dist/
+.mypy_cache
+.pytest_cache

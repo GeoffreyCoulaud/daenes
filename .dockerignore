@@ -1,0 +1,17 @@
+.git
+.gitignore
+.github
+.vscode
+.venv
+.mypy_cache
+.pytest_cache
+__pycache__/
+*.pyc
+Dockerfile
+.dockerignore
+compose*.yml
+docker-compose*.yml
+daenes/tests
+examples
+CONTRIBUTING.md
+.pylintrc

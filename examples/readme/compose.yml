@@ -1,0 +1,43 @@
+networks:
+
+  # This network is watched, because it names the domain it publishes.
+  services:
+    labels:
+      - daenes.domain=services.internal
+
+  # This one too, under another domain.
+  admin-services:
+    labels:
+      - daenes.domain=admin.internal
+
+  # This network is not watched: it names no domain.
+  some-internal-network:
+
+services:
+
+  daenes:
+    image: ghcr.io/geoffreycoulaud/daenes:latest
+    volumes:
+      # The docker socket is needed to discover networks and containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Directory where the zone files will be written
+      - ./zones:/zones
+    environment:
+      # The address of the DNS server that will serve these zones
+      - DNS_IP=10.0.0.53
+
+  # This container answers at www.services.internal and at
+  # www.admin.internal, each with its address on the network in question.
+  httpd:
+    container_name: www
+    image: httpd:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ../sample-website:/usr/local/apache2/htdocs
+    networks:
+      # The name comes from the container, the domain from the network.
+      services:
+      # Same thing here, to show that a container may have several domains,
+      # each pointing at its own address on the network it belongs to.
+      admin-services:
