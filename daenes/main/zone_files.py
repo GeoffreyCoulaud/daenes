@@ -15,7 +15,15 @@ SOA_EXPIRE = 604800
 SOA_NEGATIVE_TTL = 600
 
 # The serial out of a zone file daenes wrote, whichever version wrote it. Up to
-# daenes 0.2 the TTL was spelled out on every line, this one included.
+# daenes 0.2 the TTL was spelled out on every line, this one included, so both
+# of these have to be read, and both answer 27:
+#
+#   @ IN SOA ns admin 27 3600 600 604800 600       what daenes 1.0 writes
+#   @ 60 IN SOA ns admin 27 3600 600 604800 600    what daenes 0.2 wrote
+#
+# The optional group is that TTL, the two \S+ are the nameserver and the
+# hostmaster, which are not read back, and the four numbers after the serial
+# are the timers, which are not either.
 SOA_SERIAL = re.compile(
     r"^@\s+(?:\d+\s+)?IN\s+SOA\s+\S+\s+\S+\s+(?P<serial>\d+)\b",
     re.MULTILINE,
