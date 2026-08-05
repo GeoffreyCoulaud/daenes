@@ -14,8 +14,7 @@ DEFAULT_SETTLE_INTERVAL_MILLIS = 200
 DEFAULT_ALLOW_MULTIPLE_ADDRESSES_PER_NAME = False
 DEFAULT_ALLOW_MULTIPLE_NETWORKS_PER_ZONE = False
 
-# What a wait spelled in milliseconds is divided by to become one in seconds,
-# which is the only unit the application itself knows.
+# Seconds being the only unit the application itself waits in.
 MILLIS_PER_SECOND = 1000
 
 TRUE = "true"
@@ -105,18 +104,16 @@ def get_configuration() -> Config:
         nameserver_address=_get_nameserver_address(),
         # Zero is legal: it tells resolvers not to cache at all.
         ttl=_get_integer("DNS_TTL_SECONDS", DEFAULT_TTL, minimum=0),
-        # The longest daenes goes without reading the deployment, rather than
-        # how often it does: the docker events it waits on are what usually ends
-        # the wait, well before this runs out.
+        # The longest daenes goes without a pass, not how often it makes one: a
+        # docker event usually ends the wait well before this runs out.
         resync_interval=_get_integer(
             "RESYNC_INTERVAL_SECONDS", DEFAULT_RESYNC_INTERVAL, minimum=1
         ),
         retry_interval=_get_integer(
             "RETRY_INTERVAL_SECONDS", DEFAULT_RETRY_INTERVAL, minimum=1
         ),
-        # Read in milliseconds, being shorter than a second, and kept in
-        # seconds. Zero is legal: it publishes every state a deployment coming
-        # up passes through.
+        # Asked for in milliseconds, being shorter than a second. Zero is legal:
+        # it publishes every state a deployment coming up passes through.
         settle_interval=_get_integer(
             "SETTLE_INTERVAL_MILLIS", DEFAULT_SETTLE_INTERVAL_MILLIS, minimum=0
         )
