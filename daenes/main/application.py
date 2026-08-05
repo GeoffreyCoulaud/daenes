@@ -8,16 +8,11 @@ from .zone_synchronizer import ZoneSynchronizer
 class Application:
     """The lifecycle: synchronize, wait for news, retry what is worth retrying.
 
-    Nothing is read from the news but that there is some: every pass reads the
-    whole deployment, so waking for nothing costs a pass that writes nothing,
-    and the wait running out is a pass all the same.
-
     Anything a retry cannot fix propagates, for the entry point to turn into
     an exit code.
     """
 
-    # Three durations, because the loop waits on three different things, and
-    # every call site names them rather than lining them up.
+    # Three durations, because the loop waits on three different things.
     # pylint: disable=too-many-arguments,too-many-positional-arguments
     def __init__(
         self,
@@ -50,9 +45,8 @@ class Application:
     def _settle(self) -> None:
         """Let a deployment that is moving finish moving.
 
-        It comes up a container at a time, and every state it passes through
-        would otherwise be a zone file of its own, and a transfer to every
-        secondary server watching that zone.
+        It comes up a container at a time, and every state in between would be a
+        zone file of its own, and a transfer to every secondary server.
         """
         logging.debug("The deployment changed, letting it settle")
         self._clock.sleep(self._settle_interval)

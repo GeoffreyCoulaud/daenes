@@ -58,8 +58,8 @@ def build_application(config: Config, client: DockerClient) -> Application:
             ttl=config.ttl,
             allowances=config.allowances,
         ),
-        # One client for both: the stream holds a connection of its pool open
-        # while the passes take others out of it.
+        # One client for both: the stream holds one connection of its pool open,
+        # and the passes take others out of it.
         notifier=DockerChangeNotifier(client=client),
         clock=SystemClock(),
         retry_interval=config.retry_interval,
