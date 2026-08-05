@@ -189,11 +189,11 @@ Its name:
 - If the `daenes.domain` label is set on the container, it is used
 - Otherwise the container's name is used, which is not the same as the compose service name
 
-Its aliases, each published as a CNAME pointing at the name above:
+Its aliases, each answering with the same addresses as the name above:
 - The compose service name, which docker makes an alias on every network
 - Whatever aliases the container has on the network
 
-The name and its aliases are then attached to the network's domain.
+The name and its aliases are then attached to the network's domain. An alias is published as an address rather than as a CNAME pointing at the name, which is what docker's own resolver answers as well. Each name therefore stands on its own: a container whose name cannot be served is still reached through the aliases that can.
 
 Names are lowercased, since DNS makes no difference between two spellings of one name. A name that could not be served is left out, with a line in the logs saying which and why:
 
@@ -203,9 +203,34 @@ Names are lowercased, since DNS makes no difference between two spellings of one
 
 A container answers over whichever families its network carries: A on an IPv4 network, A and AAAA on a dual stack one, AAAA alone on a network created with `--ipv4=false`.
 
-Two containers may share a name, in which case it answers with both addresses: which of them a client can reach is not for daenes to guess. A name that is both an address and an alias, or an alias pointing at two containers, is left out entirely instead: no answer could be defended, and RFC 2181 forbids the first outright.
-
 A published network with nothing left on it still gets a zone, holding its nameserver alone, so the names that used to be there stop resolving. A zone is only rewritten when something in it changed, so its serial stays put as long as the deployment does.
+
+### When one name answers for several containers
+
+Nothing forbids it, and nothing is dropped over it: the name answers with every address, a client reaches whichever one it is handed, and daenes says so in the logs. That is the same answer docker's own resolver gives, but a deployment does not always mean to ask for it. Two ways to get there:
+
+**Two networks naming the same domain.** Their containers land in one zone, which is what naming the same domain is for. If each network holds a container of the same name, that name now answers for both, and a client has no way of telling which one it will reach.
+
+```yml
+networks:
+  front:
+    labels: [daenes.domain=services.internal]
+  back:
+    labels: [daenes.domain=services.internal]   # deliberately the same zone
+```
+
+**A name that is one container's name and another's alias.** Since aliases are published as addresses, `api` below answers with the addresses of both containers.
+
+```yml
+services:
+  api:            # its compose service name is an alias on the network
+    image: some/api
+  legacy-api:
+    container_name: api   # the same name, another container
+    image: some/legacy
+```
+
+Both cases are reported as `The name 'api' answers for 2 containers at once`. Give one of them a `daenes.domain` label if that is not what you wanted.
 
 ## Upgrading from 0.2 to 1.0
 

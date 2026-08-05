@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from daenes.main.model import AddressRecord, AliasRecord, Zone
+from daenes.main.model import AddressRecord, Zone
 from daenes.main.zone_files import FileSystemZoneStore, render
 
 from .conftest import ORIGIN, TTL
@@ -23,7 +23,6 @@ def make_zone(
     origin: str = ORIGIN,
     serial: int = 1,
     addresses: tuple[AddressRecord, ...] = (),
-    aliases: tuple[AliasRecord, ...] = (),
 ) -> Zone:
     return Zone(
         origin=origin,
@@ -32,7 +31,6 @@ def make_zone(
         nameserver="ns",
         hostmaster="admin",
         addresses=addresses,
-        aliases=aliases,
     )
 
 
@@ -50,8 +48,8 @@ def test_a_zone_is_written_as_a_master_file():
                 name="web",
                 addresses=(ip_address("172.20.0.2"), ip_address("fd00::2")),
             ),
+            AddressRecord(name="www", addresses=(ip_address("172.20.0.2"),)),
         ),
-        aliases=(AliasRecord(name="www", target="web"),),
     )
 
     assert render(zone) == (
@@ -63,7 +61,7 @@ def test_a_zone_is_written_as_a_master_file():
         "ns IN A 10.0.0.53\n"
         "web IN A 172.20.0.2\n"
         "web IN AAAA fd00::2\n"
-        "www IN CNAME web\n"
+        "www IN A 172.20.0.2\n"
     )
 
 

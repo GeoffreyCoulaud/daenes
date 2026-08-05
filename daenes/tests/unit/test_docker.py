@@ -65,12 +65,14 @@ def make_container(
     name: str = "web",
     labels: dict[str, str] | None = None,
     network: str = NETWORK,
+    short_id: str = "0123456789ab",
     **settings: Any,
 ) -> FakeContainer:
     """A container on one network, whose settings the test spells out."""
     return FakeContainer(
         name=name,
         labels=labels,
+        short_id=short_id,
         networks={network: make_network_settings(**settings)},
     )
 
@@ -84,6 +86,13 @@ def test_a_network_naming_a_domain_is_published():
     assert networks[0].origin == ORIGIN
     assert [domain.name for domain in networks[0].domains] == ["web"]
     assert networks[0].domains[0].addresses == (ip_address("172.20.0.2"),)
+
+
+def test_a_container_is_reported_with_its_id():
+    """Two containers asking for one name are told apart by nothing else."""
+    source = make_source(make_network(make_container(short_id="abc123def456")))
+
+    assert domains_of(source)[0].container == "abc123def456"
 
 
 def test_a_network_everything_left_is_still_published():

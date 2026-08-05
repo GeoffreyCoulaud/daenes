@@ -1,7 +1,8 @@
 import logging
+from collections.abc import Iterator
 
 from .dns_names import MAX_NAME_LENGTH, is_valid_name, normalize
-from .model import AddressRecord, AliasRecord, IpAddress, LocalDomain, Zone
+from .model import AddressRecord, IpAddress, LocalDomain, Zone
 from .ports import NetworkSource, ZoneStore
 
 # The zone's own nameserver and hostmaster, relative to its origin. A container
@@ -18,7 +19,7 @@ FIRST_SERIAL = 1
 class ZoneSynchronizer:
     """Turns what the deployment says into the zones a DNS server serves.
 
-    Knows nothing of docker or of files: it reads domains through one port and
+    Knows nothing of docker or of files: it reads networks through one port and
     writes zones through another.
     """
 
@@ -41,8 +42,11 @@ class ZoneSynchronizer:
 
     def synchronize(self) -> None:
         """Bring every zone the deployment describes up to date."""
-        for origin, domains in sorted(self._group_by_origin().items()):
-            self._synchronize_zone(origin, domains)
+        domains_by_origin = self._group_by_origin()
+        # In a settled order, so that two runs over one deployment write and
+        # log the same way.
+        for origin in sorted(domains_by_origin):
+            self._synchronize_zone(origin, domains_by_origin[origin])
 
     def _group_by_origin(self) -> dict[str, list[LocalDomain]]:
         """Gather the containers by the zone they belong to.
@@ -52,7 +56,8 @@ class ZoneSynchronizer:
         """
         grouped: dict[str, list[LocalDomain]] = {}
         for network in self._source.get_published_networks():
-            grouped.setdefault(normalize(network.origin), []).extend(network.domains)
+            origin = normalize(network.origin)
+            grouped.setdefault(origin, []).extend(network.domains)
         return {
             origin: domains
             for origin, domains in grouped.items()
@@ -64,16 +69,15 @@ class ZoneSynchronizer:
         """Whether a zone may be built on this origin, saying why when not."""
         if not is_valid_name(origin):
             logging.error(
-                "Ignoring the network asking for %r: a domain is made of labels of "
-                "letters, digits and hyphens, and docker names its networks after "
-                "the compose project, underscore included",
+                "Ignoring the network asking for %r: "
+                "a domain is made of labels of letters, digits and hyphens",
                 origin,
             )
             return False
         if "." not in origin:
             logging.error(
-                "Ignoring the network asking for %r: a domain needs more than one "
-                "label, did you mean %s.internal?",
+                "Ignoring the network asking for %r: "
+                "a domain needs more than one label, did you mean %s.internal?",
                 origin,
                 origin,
             )
@@ -81,12 +85,9 @@ class ZoneSynchronizer:
         return True
 
     def _synchronize_zone(self, origin: str, domains: list[LocalDomain]) -> None:
-        addresses, aliases = self._build_records(origin, domains)
+        addresses = self._build_records(origin, domains)
         written = self._written.get(origin)
-        if written is not None and (written.addresses, written.aliases) == (
-            addresses,
-            aliases,
-        ):
+        if written is not None and written.addresses == addresses:
             logging.debug("Zone %s did not change, leaving it alone", origin)
             return
         zone = Zone(
@@ -96,7 +97,6 @@ class ZoneSynchronizer:
             nameserver=NAMESERVER_NAME,
             hostmaster=HOSTMASTER_NAME,
             addresses=addresses,
-            aliases=aliases,
         )
         self._store.save(zone)
         self._written[origin] = zone
@@ -118,44 +118,56 @@ class ZoneSynchronizer:
         self,
         origin: str,
         domains: list[LocalDomain],
-    ) -> tuple[tuple[AddressRecord, ...], tuple[AliasRecord, ...]]:
-        """Turn the domains of one zone into the records it answers with."""
+    ) -> tuple[AddressRecord, ...]:
+        """Turn the containers of one zone into the records it answers with."""
         addresses: dict[str, set[IpAddress]] = {
             NAMESERVER_NAME: {self._nameserver_address}
         }
-        aliases: dict[str, set[str]] = {}
+        # Which containers ended up answering on each name, to report the ones
+        # answering for several. The nameserver is nobody's container.
+        containers: dict[str, set[str]] = {}
         for domain in sorted(domains, key=lambda domain: domain.name):
-            name = self._make_name(origin, domain.name, "container")
-            if name is None:
-                continue
-            addresses.setdefault(name, set()).update(domain.addresses)
-            for alias in sorted(domain.aliases):
-                alias_name = self._make_name(origin, alias, "alias")
-                # Docker lists a container's own name among its aliases, and a
-                # name pointing at itself is a loop, not an alias.
-                if alias_name is None or alias_name == name:
-                    continue
-                aliases.setdefault(alias_name, set()).add(name)
-        return _drop_ambiguous_names(addresses, aliases)
+            for name in self._get_names(origin, domain):
+                addresses.setdefault(name, set()).update(domain.addresses)
+                containers.setdefault(name, set()).add(domain.container)
+        _report_shared_names(containers)
+        return tuple(
+            AddressRecord(
+                name=name,
+                addresses=tuple(sorted(found, key=_address_sort_key)),
+            )
+            for name, found in sorted(addresses.items())
+        )
+
+    def _get_names(self, origin: str, domain: LocalDomain) -> Iterator[str]:
+        """Every name one container answers to, its own and its aliases.
+
+        Docker's own resolver makes no difference between the two, and neither
+        does this: an alias is a name answering with the same addresses. Each
+        of them stands on its own, so a container whose name cannot be served
+        is still reached through the aliases that can.
+        """
+        for label in [domain.name, *sorted(domain.aliases)]:
+            name = self._make_name(origin, label)
+            if name is not None:
+                yield name
 
     @staticmethod
-    def _make_name(origin: str, label: str, kind: str) -> str | None:
-        """The name to write for a container or an alias, or None to skip it."""
+    def _make_name(origin: str, label: str) -> str | None:
+        """The name to write for a container, or None to leave it out."""
         name = normalize(label)
         if not is_valid_name(name):
             logging.warning(
-                "Ignoring the %s %r of zone %s: it is not a valid domain name, "
+                "Ignoring the name %r of zone %s: it is not a valid domain name, "
                 "give that container a domain of its own instead",
-                kind,
                 label,
                 origin,
             )
             return None
         if len(name) + len(".") + len(origin) > MAX_NAME_LENGTH:
             logging.warning(
-                "Ignoring the %s %r of zone %s: the full name would be longer "
+                "Ignoring the name %r of zone %s: the full name would be longer "
                 "than %d characters",
-                kind,
                 label,
                 origin,
                 MAX_NAME_LENGTH,
@@ -163,9 +175,8 @@ class ZoneSynchronizer:
             return None
         if name == NAMESERVER_NAME:
             logging.warning(
-                "Ignoring the %s %r of zone %s: that name belongs to the zone's "
-                "own nameserver",
-                kind,
+                "Ignoring the name %r of zone %s: it belongs to the zone's own "
+                "nameserver",
                 label,
                 origin,
             )
@@ -173,45 +184,25 @@ class ZoneSynchronizer:
         return name
 
 
-def _drop_ambiguous_names(
-    addresses: dict[str, set[IpAddress]],
-    aliases: dict[str, set[str]],
-) -> tuple[tuple[AddressRecord, ...], tuple[AliasRecord, ...]]:
-    """Remove the names a DNS server could not answer for without choosing.
+def _report_shared_names(containers: dict[str, set[str]]) -> None:
+    """Say which names ended up answering for more than one container.
 
-    An alias sharing its name with an address, or pointing at two different
-    names, has no defensible answer, and RFC 2181 section 10.1 forbids the
-    first outright. Neither reading is published: guessing which container the
-    deployment meant is not ours to do.
+    Nothing is dropped over it: the name answers with every address, which is
+    what docker's own resolver answers too. It is worth saying all the same,
+    since a client reaches whichever address it is handed, and the deployment
+    may not have meant to ask for that.
     """
-    for name in sorted(set(aliases) & set(addresses)):
-        logging.warning(
-            "Ignoring the name %r entirely: it is both an address and an alias of %s",
-            name,
-            ", ".join(sorted(aliases[name])),
-        )
-        del aliases[name]
-        del addresses[name]
-    for name, targets in sorted(aliases.items()):
-        if len(targets) > 1:
+    for name, claimants in sorted(containers.items()):
+        if len(claimants) > 1:
             logging.warning(
-                "Ignoring the alias %r entirely: it points at %s at once",
+                "The name %r answers for %d containers at once (%s). "
+                "Clients will reach whichever of them they are handed",
                 name,
-                " and ".join(sorted(targets)),
+                len(claimants),
+                ", ".join(sorted(claimants)),
             )
-            del aliases[name]
-    return (
-        tuple(
-            AddressRecord(name=name, addresses=tuple(sorted(found, key=_sort_key)))
-            for name, found in sorted(addresses.items())
-        ),
-        tuple(
-            AliasRecord(name=name, target=next(iter(targets)))
-            for name, targets in sorted(aliases.items())
-        ),
-    )
 
 
-def _sort_key(address: IpAddress) -> tuple[int, bytes]:
+def _address_sort_key(address: IpAddress) -> tuple[int, bytes]:
     """Order addresses by family then value, since the two do not compare."""
     return (address.version, address.packed)

@@ -8,10 +8,14 @@ type IpAddress = IPv4Address | IPv6Address
 class LocalDomain:
     """A container on a network, as docker describes it.
 
+    `container` identifies the container itself, which is the only thing that
+    tells one of these apart from another asking for the same name.
+
     Nothing here is known to be servable yet. Whether these names may be
     written into a zone is decided where the zone is built.
     """
 
+    container: str
     name: str
     addresses: tuple[IpAddress, ...]
     aliases: frozenset[str] = frozenset()
@@ -36,18 +40,14 @@ class AddressRecord:
 
     Several addresses on one name is an ordinary answer, not a conflict: the
     client picks. Which of them it can actually reach is not ours to guess.
+
+    A container's aliases are records of this kind too, rather than something
+    pointing at its name. Docker's own resolver answers them the same way, and
+    a name whose only job is to route does not need a canonical one behind it.
     """
 
     name: str
     addresses: tuple[IpAddress, ...]
-
-
-@dataclass(frozen=True)
-class AliasRecord:
-    """A name that answers by pointing at another name in the same zone."""
-
-    name: str
-    target: str
 
 
 @dataclass(frozen=True)
@@ -60,4 +60,3 @@ class Zone:
     nameserver: str
     hostmaster: str
     addresses: tuple[AddressRecord, ...]
-    aliases: tuple[AliasRecord, ...]

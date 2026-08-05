@@ -66,9 +66,15 @@ def make_domain(
     name: str = "web",
     addresses: tuple[str, ...] = ("172.20.0.2",),
     aliases: tuple[str, ...] = (),
+    container: str | None = None,
 ) -> LocalDomain:
-    """One container on one network, as the docker adapter would report it."""
+    """One container on one network, as the docker adapter would report it.
+
+    Two of these are the same container unless the test says otherwise, since
+    what usually brings one name back twice is a container on two networks.
+    """
     return LocalDomain(
+        container=name if container is None else container,
         name=name,
         addresses=tuple(ip_address(address) for address in addresses),
         aliases=frozenset(aliases),
@@ -104,8 +110,10 @@ class FakeContainer:
         name: str = "web",
         networks: dict[str, dict[str, Any]] | None = None,
         labels: dict[str, str] | None = None,
+        short_id: str = "0123456789ab",
     ) -> None:
         self.name = name
+        self.short_id = short_id
         self.labels = labels or {}
         self.attrs = {"NetworkSettings": {"Networks": networks or {}}}
 
@@ -167,14 +175,6 @@ def addresses_of(zone: Zone, name: str) -> tuple[IpAddress, ...] | None:
     return None
 
 
-def alias_targets(zone: Zone) -> dict[str, str]:
-    """Every alias of a zone, and what it points at."""
-    return {alias.name: alias.target for alias in zone.aliases}
-
-
 def names_of(zone: Zone) -> Iterator[str]:
-    """Every name a zone answers, whether by address or by alias."""
-    for record in zone.addresses:
-        yield record.name
-    for alias in zone.aliases:
-        yield alias.name
+    """Every name a zone answers."""
+    return (record.name for record in zone.addresses)

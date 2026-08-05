@@ -95,8 +95,9 @@ def test_a_zone_of_many_containers_loads(checker, tmp_path):
 def test_the_checker_refuses_a_zone_that_could_not_load(checker, tmp_path):
     """Proof that the checker is checking, and the suite above worth running.
 
-    A CNAME beside an address is what RFC 2181 section 10.1 forbids, and what
-    the synchronizer drops both sides of rather than write.
+    An underscore is what docker puts in the name it gives a compose network,
+    and the reason the name rules exist: a server refuses the whole zone over
+    one owner name no host may bear.
     """
     path = tmp_path / f"{ORIGIN}.zone"
     path.write_text(
@@ -105,12 +106,11 @@ def test_the_checker_refuses_a_zone_that_could_not_load(checker, tmp_path):
         "@ IN SOA ns admin 1 3600 600 604800 600\n"
         "@ IN NS ns\n"
         "ns IN A 10.0.0.53\n"
-        "web IN A 172.20.0.2\n"
-        "web IN CNAME ns\n",
+        "my_service IN A 172.20.0.2\n",
         encoding="utf-8",
     )
 
     code, output = check_zone(checker, path)
 
     assert code != 0, f"{CHECKER} accepted a zone no server would load"
-    assert "CNAME and other data" in output
+    assert "bad owner name" in output

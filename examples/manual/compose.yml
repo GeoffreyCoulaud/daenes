@@ -87,9 +87,28 @@ services:
     networks:
       - services
 
-  # Its name is not one a host may bear, so it is left out with a warning.
+  # Its name is not one a host may bear, so it is left out with a warning. The
+  # container still answers at web7, the alias compose gives it.
   web7:
     container_name: invisible_invalid_name
+    image: httpd:latest
+    volumes:
+      - ../sample-website:/usr/local/apache2/htdocs
+    networks:
+      - services
+
+  # Compose makes this service's name an alias on the network, and the
+  # container below claims the very same name. Both answer at it, and daenes
+  # says so rather than choosing.
+  shared-name:
+    image: httpd:latest
+    volumes:
+      - ../sample-website:/usr/local/apache2/htdocs
+    networks:
+      - services
+
+  web8:
+    container_name: shared-name
     image: httpd:latest
     volumes:
       - ../sample-website:/usr/local/apache2/htdocs

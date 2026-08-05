@@ -132,6 +132,7 @@ class DockerDomainSource:
             logging.debug("Container %s has no address on %s", name, network.name)
             return None
         return LocalDomain(
+            container=container.short_id,
             name=name,
             addresses=addresses,
             aliases=frozenset(settings.get("Aliases") or ()),

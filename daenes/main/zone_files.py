@@ -49,7 +49,6 @@ def render(zone: Zone) -> str:
         for record in zone.addresses
         for address in record.addresses
     )
-    lines.extend(f"{alias.name} IN CNAME {alias.target}" for alias in zone.aliases)
     return "\n".join(lines) + "\n"
 
 

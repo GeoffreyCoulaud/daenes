@@ -62,6 +62,7 @@ def make_domain(
     aliases: tuple[str, ...] = (),
 ) -> LocalDomain:
     return LocalDomain(
+        container=name,
         name=name,
         addresses=tuple(ip_address(address) for address in addresses),
         aliases=frozenset(aliases),
