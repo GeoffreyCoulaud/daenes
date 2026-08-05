@@ -62,7 +62,7 @@ def domains_of(source: DockerDomainSource) -> list[LocalDomain]:
 
 
 def make_container(
-    name: str | None = "web",
+    name: str = "web",
     labels: dict[str, str] | None = None,
     network: str = NETWORK,
     **settings: Any,
@@ -141,12 +141,6 @@ def test_a_container_may_name_the_domain_it_wants():
     assert domains_of(source)[0].name == "front"
 
 
-def test_a_container_docker_gave_no_name_is_ignored():
-    source = make_source(make_network(make_container(name=None)))
-
-    assert not domains_of(source)
-
-
 def test_a_container_that_left_the_network_is_ignored():
     """Between being listed and being read, a container may be gone."""
     source = make_source(make_network(make_container(network="another_network")))
@@ -161,13 +155,23 @@ def test_a_container_with_no_address_on_the_network_is_ignored():
     assert not domains_of(source)
 
 
-def test_a_container_on_a_dual_stack_network_answers_on_both():
+def test_a_container_on_a_dual_stack_network_answers_over_both():
+    """enable_ipv6 adds a stack rather than replacing the other one."""
     source = make_source(make_network(make_container(ipv6_address="fd00::2")))
 
     assert domains_of(source)[0].addresses == (
         ip_address("172.20.0.2"),
         ip_address("fd00::2"),
     )
+
+
+def test_a_container_on_an_ipv6_only_network_answers_over_ipv6():
+    """A network created with --ipv4=false leaves IPAddress empty."""
+    container = make_container(address=None, ipv6_address="fd00::2")
+
+    source = make_source(make_network(container))
+
+    assert domains_of(source)[0].addresses == (ip_address("fd00::2"),)
 
 
 def test_an_address_docker_makes_no_sense_of_is_ignored():

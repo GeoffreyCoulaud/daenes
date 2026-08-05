@@ -201,6 +201,8 @@ Names are lowercased, since DNS makes no difference between two spellings of one
 - A label may be 63 characters long, and a whole name 253 (RFC 1035).
 - `ns` belongs to the zone's own nameserver, the one its NS record points at.
 
+A container answers over whichever families its network carries: A on an IPv4 network, A and AAAA on a dual stack one, AAAA alone on a network created with `--ipv4=false`.
+
 Two containers may share a name, in which case it answers with both addresses: which of them a client can reach is not for daenes to guess. A name that is both an address and an alias, or an alias pointing at two containers, is left out entirely instead: no answer could be defended, and RFC 2181 forbids the first outright.
 
 A published network with nothing left on it still gets a zone, holding its nameserver alone, so the names that used to be there stop resolving. A zone is only rewritten when something in it changed, so its serial stays put as long as the deployment does.

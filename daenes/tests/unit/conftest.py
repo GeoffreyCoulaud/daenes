@@ -101,13 +101,11 @@ class FakeContainer:
 
     def __init__(
         self,
-        name: str | None = "web",
+        name: str = "web",
         networks: dict[str, dict[str, Any]] | None = None,
         labels: dict[str, str] | None = None,
-        container_id: str = "0123456789ab",
     ) -> None:
         self.name = name
-        self.id = container_id  # pylint: disable=invalid-name
         self.labels = labels or {}
         self.attrs = {"NetworkSettings": {"Networks": networks or {}}}
 

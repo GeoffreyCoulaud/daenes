@@ -33,9 +33,8 @@ class DockerStartupError(Exception):
     def __init__(self, *args: object) -> None:
         super().__init__(
             *args,
-            "Could not reach the docker daemon. Check that its socket is mounted, "
-            "with -v /var/run/docker.sock:/var/run/docker.sock or the compose "
-            "equivalent",
+            "Could not reach the docker daemon. "
+            "Check that /var/run/docker.sock is mounted.",
         )
 
 
@@ -123,9 +122,6 @@ class DockerDomainSource:
             logging.debug("Container %s opted out of daenes", container.name)
             return None
         name = _get_name(container)
-        if name is None:
-            logging.warning("Ignoring a container docker gave no name: %s", container.id)
-            return None
         # A container may have left the network since it was listed.
         settings = container.attrs["NetworkSettings"]["Networks"].get(network.name)
         if settings is None:
@@ -156,9 +152,15 @@ def _is_enabled(container: Container) -> bool:
     return container.labels.get(ENABLED_LABEL, "true") == "true"
 
 
-def _get_name(container: Container) -> str | None:
-    """The name a container asks for, its own unless a label says otherwise."""
-    return container.labels.get(DOMAIN_LABEL) or container.name
+def _get_name(container: Container) -> str:
+    """The name a container asks for, its own unless a label says otherwise.
+
+    Docker names every container it answers a full inspect for, so the last
+    fallback stands for nothing it has ever said. It is there so that a
+    container arriving without a name would be left out by the name rules,
+    the way any other unservable name is, rather than taken for a crash.
+    """
+    return container.labels.get(DOMAIN_LABEL) or container.name or ""
 
 
 def _get_addresses(settings: dict[str, Any]) -> Iterator[IpAddress]:
