@@ -65,6 +65,15 @@ def test_a_zone_is_written_as_a_master_file():
     )
 
 
+def test_a_record_on_the_zone_itself_is_written_at_its_apex():
+    """A container answering for the domain, which a master file spells @."""
+    zone = make_zone(
+        addresses=(AddressRecord(name="", addresses=(ip_address("172.20.0.2"),)),)
+    )
+
+    assert render(zone).endswith("@ IN A 172.20.0.2\n")
+
+
 def test_a_zone_with_nothing_in_it_still_says_who_serves_it():
     """A network everything left is a zone that answers, not a missing file."""
     assert render(make_zone()).endswith("@ IN SOA ns admin 1 3600 600 604800 600\n@ IN NS ns\n")

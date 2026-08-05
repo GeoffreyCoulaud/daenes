@@ -79,6 +79,38 @@ services:
         aliases:
           - included-multiple-networks-alias
 
+  # Docker answers for a hostname too, so daenes publishes it alongside the
+  # container's name and its aliases.
+  web5:
+    container_name: included-with-a-hostname
+    hostname: included-by-hostname
+    image: httpd:latest
+    volumes:
+      - ../sample-website:/usr/local/apache2/htdocs
+    networks:
+      - services
+
+  # Its hostname already carries the zone's domain, so it is published once
+  # rather than as included-already-qualified.services.internal.services.internal.
+  web9:
+    container_name: included-qualified-container
+    hostname: included-already-qualified.services.internal
+    image: httpd:latest
+    volumes:
+      - ../sample-website:/usr/local/apache2/htdocs
+    networks:
+      - services
+
+  # Named after the zone itself, so services.internal resolves to it.
+  web10:
+    container_name: included-as-the-domain-itself
+    hostname: services.internal
+    image: httpd:latest
+    volumes:
+      - ../sample-website:/usr/local/apache2/htdocs
+    networks:
+      - services
+
   # No container_name, so compose names it after the project, and its name
   # carries the hyphens compose puts there.
   web6:

@@ -19,11 +19,18 @@ dev = [
     "pytest-cov>=7",
     "pylint>=4",
     "pyright>=1.1",
+    "testcontainers>=4.15.0",
+    "pytest-xdist>=3.8.0",
+    "filelock>=3.32.2",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["daenes/tests/unit"]
 addopts = "--cov=daenes.main --cov-branch --cov-report=term-missing --cov-fail-under=100"
+markers = [
+    "contract: checks an assumption about the docker API, without running daenes",
+    "ipv6: needs a daemon able to create an IPv6 network",
+]
 
 # Keep the tests subpackage out of built wheels/sdists.
 [tool.hatch.build]

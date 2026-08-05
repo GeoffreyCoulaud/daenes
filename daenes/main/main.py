@@ -85,8 +85,8 @@ def main() -> None:
         sys.exit(error.return_code)
     except DockerStartupError as error:
         logging.critical("%s", error)
-        logging.debug("The daemon could not be reached", exc_info=error)
-        sys.exit(ReturnCodes.DOCKER_UNREACHABLE_AT_STARTUP)
+        logging.debug("The daemon could not be used", exc_info=error)
+        sys.exit(error.return_code)
     except Exception as error:  # pylint: disable=broad-exception-caught
         logging.critical("Unretryable error in lifecycle", exc_info=error)
         sys.exit(ReturnCodes.UNRETRYABLE_EXCEPTION_IN_LIFECYCLE)

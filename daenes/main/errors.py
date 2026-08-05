@@ -8,6 +8,7 @@ class ReturnCodes(IntEnum):
     INVALID_ENVIRONMENT_VARIABLE = 2
     UNRETRYABLE_EXCEPTION_IN_LIFECYCLE = 3
     DOCKER_UNREACHABLE_AT_STARTUP = 4
+    DOCKER_TOO_OLD = 5
 
 
 class RetryableError(Exception):
