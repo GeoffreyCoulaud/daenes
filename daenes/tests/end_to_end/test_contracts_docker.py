@@ -30,6 +30,9 @@ from .conftest import IDLE_COMMAND, IDLE_IMAGE, Deployment
 # Nothing here runs daenes, so CI checks these without building its image.
 pytestmark = pytest.mark.contract
 
+# Reserved by RFC 6761 for exactly this: a domain no resolver ever answers for.
+UNRESOLVABLE_SEARCH_DOMAIN = "nothing.test"
+
 
 def get_networks(client: DockerClient, name: str):
     """One network as `networks.list()` answers it, which is how daenes finds it."""
@@ -251,12 +254,20 @@ def test_docker_answers_at_every_name_it_calls_a_dns_name(
         aliases=(unique("api"),),
         hostname=unique("other-host"),
     )
-    asker = deployment.add_container(network, name=unique("asker"))
+    # A search domain nothing resolves under, which is what a cloud runner
+    # hands its containers. Every question below is absolute, so it changes
+    # none of the answers, and the day one stops being absolute it will.
+    asker = deployment.add_container(
+        network, name=unique("asker"), dns_search=(UNRESOLVABLE_SEARCH_DOMAIN,)
+    )
 
     settings = get_settings(get_networks(client, network.name), network.name, web)
 
     for name in settings[DNS_NAMES_KEY]:
-        result = asker.exec(["nslookup", name])
+        # Asked for as an absolute name, with the root dot: a relative one is
+        # the search domain's to complete first, and busybox's nslookup lets it
+        # do so even where resolv.conf says ndots:0.
+        result = asker.exec(["nslookup", f"{name}."])
         assert result.exit_code == 0, (
             f"docker calls {name!r} a DNS name and does not resolve it:\n"
             f"{result.output.decode(errors='replace')}"

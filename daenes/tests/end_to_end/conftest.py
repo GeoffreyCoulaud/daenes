@@ -266,6 +266,7 @@ class Deployment:
         name: str | None = None,
         aliases: tuple[str, ...] = (),
         hostname: str | None = None,
+        dns_search: tuple[str, ...] = (),
         **labels: str,
     ) -> DockerContainer:
         """A container that does nothing but hold its names and an address.
@@ -277,7 +278,9 @@ class Deployment:
             DockerContainer(IDLE_IMAGE)
             .with_command(IDLE_COMMAND)
             .with_network(network)
-            .with_kwargs(labels=labels, hostname=hostname)
+            .with_kwargs(
+                labels=labels, hostname=hostname, dns_search=list(dns_search)
+            )
         )
         if name is not None:
             container.with_name(name)
