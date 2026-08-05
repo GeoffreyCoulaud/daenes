@@ -14,6 +14,7 @@ from daenes.main import main as main_module
 from daenes.main.application import Application
 from daenes.main.config import Config
 from daenes.main.docker import DOMAIN_LABEL, DockerStartupError
+from daenes.main.docker_events import DockerChangeNotifier
 from daenes.main.errors import ReturnCodes
 from daenes.main.model import Allowances
 from daenes.main.main import (
@@ -35,8 +36,9 @@ CONFIG = Config(
     zones_directory=Path("/zones"),
     nameserver_address=ip_address("10.0.0.53"),
     ttl=60,
-    success_interval=60,
+    resync_interval=60,
     retry_interval=10,
+    settle_interval=0.2,
     allowances=Allowances(),
 )
 
@@ -105,7 +107,13 @@ def test_the_application_is_wired_from_the_configuration(tmp_path):
 
     application = build_application(replace(CONFIG, zones_directory=tmp_path), client)
     assert isinstance(application, Application)
-    application._synchronizer.synchronize()  # pylint: disable=protected-access
+    # pylint: disable=protected-access
+    # News comes from the daemon, through the very client the passes read it
+    # with, which is the wiring saying so.
+    notifier = application._notifier
+    assert isinstance(notifier, DockerChangeNotifier)
+    assert notifier._client is client
+    application._synchronizer.synchronize()
 
     written = (tmp_path / "services.internal.zone").read_text(encoding="utf-8")
     # What the zone looks like is settled elsewhere; what matters here is that

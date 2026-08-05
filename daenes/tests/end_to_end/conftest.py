@@ -65,8 +65,10 @@ NAMESERVER_NAME = "ns"
 APEX_NAME = "@"
 
 # The intervals daenes is started with here, short enough for a test to watch
-# several passes go by without waiting on them.
-SUCCESS_INTERVAL = 2
+# several passes go by without waiting on them. The resync interval is the
+# longest daenes goes without a pass, so a test about what it does on its own
+# raises it out of the way and watches the docker events do the work.
+RESYNC_INTERVAL = 2
 RETRY_INTERVAL = 1
 
 # Generous: a test only waits this out when something is actually wrong.
@@ -349,8 +351,8 @@ def start_daenes(
     def start(mount_socket: bool = True, **overrides: Any) -> DockerContainer:
         environment: dict[str, Any] = {
             "DNS_IP": NAMESERVER_ADDRESS,
-            "SUCCESS_INTERVAL": SUCCESS_INTERVAL,
-            "RETRY_INTERVAL": RETRY_INTERVAL,
+            "RESYNC_INTERVAL_SECONDS": RESYNC_INTERVAL,
+            "RETRY_INTERVAL_SECONDS": RETRY_INTERVAL,
             "LOG_LEVEL": "DEBUG",
         }
         container = DockerContainer(daenes_image).with_volume_mapping(

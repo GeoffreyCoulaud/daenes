@@ -8,10 +8,15 @@ from .model import Allowances, IpAddress
 
 DEFAULT_ZONES_DIRECTORY = "/zones"
 DEFAULT_TTL = 60
-DEFAULT_SUCCESS_INTERVAL = 60
+DEFAULT_RESYNC_INTERVAL = 60
 DEFAULT_RETRY_INTERVAL = 10
+DEFAULT_SETTLE_INTERVAL_MILLIS = 200
 DEFAULT_ALLOW_MULTIPLE_ADDRESSES_PER_NAME = False
 DEFAULT_ALLOW_MULTIPLE_NETWORKS_PER_ZONE = False
+
+# What a wait spelled in milliseconds is divided by to become one in seconds,
+# which is the only unit the application itself knows.
+MILLIS_PER_SECOND = 1000
 
 TRUE = "true"
 FALSE = "false"
@@ -34,8 +39,9 @@ class Config:
     zones_directory: Path
     nameserver_address: IpAddress
     ttl: int
-    success_interval: int
+    resync_interval: int
     retry_interval: int
+    settle_interval: float
     allowances: Allowances
 
 
@@ -98,13 +104,23 @@ def get_configuration() -> Config:
         zones_directory=Path(getenv("ZONES_DIR", DEFAULT_ZONES_DIRECTORY)),
         nameserver_address=_get_nameserver_address(),
         # Zero is legal: it tells resolvers not to cache at all.
-        ttl=_get_integer("DNS_TTL", DEFAULT_TTL, minimum=0),
-        success_interval=_get_integer(
-            "SUCCESS_INTERVAL", DEFAULT_SUCCESS_INTERVAL, minimum=1
+        ttl=_get_integer("DNS_TTL_SECONDS", DEFAULT_TTL, minimum=0),
+        # The longest daenes goes without reading the deployment, rather than
+        # how often it does: the docker events it waits on are what usually ends
+        # the wait, well before this runs out.
+        resync_interval=_get_integer(
+            "RESYNC_INTERVAL_SECONDS", DEFAULT_RESYNC_INTERVAL, minimum=1
         ),
         retry_interval=_get_integer(
-            "RETRY_INTERVAL", DEFAULT_RETRY_INTERVAL, minimum=1
+            "RETRY_INTERVAL_SECONDS", DEFAULT_RETRY_INTERVAL, minimum=1
         ),
+        # Read in milliseconds, being shorter than a second, and kept in
+        # seconds. Zero is legal: it publishes every state a deployment coming
+        # up passes through.
+        settle_interval=_get_integer(
+            "SETTLE_INTERVAL_MILLIS", DEFAULT_SETTLE_INTERVAL_MILLIS, minimum=0
+        )
+        / MILLIS_PER_SECOND,
         allowances=Allowances(
             multiple_addresses_per_name=_get_boolean(
                 "ALLOW_MULTIPLE_ADDRESSES_PER_NAME",

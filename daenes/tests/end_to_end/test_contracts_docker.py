@@ -9,15 +9,20 @@ the fact rather than surfacing in the middle of an end-to-end run.
 Nothing here runs daenes, or needs its image built.
 """
 
+import time
 from ipaddress import ip_address
 
 import pytest
 from docker.client import DockerClient
 from docker.errors import DockerException
 
+from daenes.main.docker_events import WATCHED_EVENTS
+
 from ..external_contracts import (
     CONTAINERS_KEY,
     DNS_NAMES_KEY,
+    EVENT_ACTION_KEY,
+    EVENT_TYPE_KEY,
     IPV4_ADDRESS_KEY,
     IPV6_ADDRESS_KEY,
     LABELS_KEY,
@@ -25,7 +30,7 @@ from ..external_contracts import (
     NETWORKS_KEY,
     NO_ADDRESS,
 )
-from .conftest import IDLE_COMMAND, IDLE_IMAGE, Deployment
+from .conftest import IDLE_COMMAND, IDLE_IMAGE, TIMEOUT, Deployment, poll_until
 
 # Nothing here runs daenes, so CI checks these without building its image.
 pytestmark = pytest.mark.contract
@@ -325,6 +330,146 @@ def test_a_container_that_stopped_has_left_the_network(
     listed = get_networks(client, network.name)
     listed.reload()
     assert not listed.containers
+
+
+# Every change to a deployment that can alter what a zone answers, and what the
+# daemon calls it. Daenes waits on this stream instead of sweeping the daemon on
+# a timer, so a change it is never told about is one nobody sees until the resync
+# interval runs out.
+#
+# The filter is imported from daenes rather than restated here, unlike the labels
+# it reads: what these pin is that the filter daenes actually sends catches each
+# of these changes, and nothing but the daemon can say whether it does. Nothing
+# is proven against itself, since the daemon is the one answering.
+
+
+def get_watched_events(client: DockerClient, since: float) -> set[tuple[str, str]]:
+    """What the daemon let through daenes's filter, as what happened to what.
+
+    Read with an `until` of now, so the stream ends by itself rather than having
+    to be cancelled, which is what daenes does and no test needs to.
+    """
+    return {
+        (event[EVENT_TYPE_KEY], event[EVENT_ACTION_KEY])
+        for event in client.events(
+            since=since, until=time.time(), filters=WATCHED_EVENTS, decode=True
+        )
+    }
+
+
+def assert_watched_for(
+    client: DockerClient,
+    since: float,
+    expected: tuple[str, str],
+) -> None:
+    """Fail unless the filter lets that event through, once the daemon sends it."""
+    try:
+        poll_until(
+            lambda: expected in get_watched_events(client, since), timeout=TIMEOUT
+        )
+    except TimeoutError as error:
+        raise AssertionError(
+            f"the daemon let {sorted(get_watched_events(client, since))} through "
+            f"daenes's filter, and never {expected}"
+        ) from error
+
+
+def test_a_network_appearing_is_watched_for(client, deployment: Deployment, origin):
+    """A zone may be published by a network created long after daenes started."""
+    since = time.time()
+
+    deployment.add_network(origin)
+
+    assert_watched_for(client, since, ("network", "create"))
+
+
+def test_a_network_going_away_is_watched_for(client, unique):
+    """Removed here rather than at teardown, which is what the event is about."""
+    network = client.networks.create(unique("going"))
+    since = time.time()
+
+    network.remove()
+
+    assert_watched_for(client, since, ("network", "destroy"))
+
+
+def test_a_container_appearing_on_a_network_is_watched_for(
+    client, deployment: Deployment, origin, unique
+):
+    """The change that adds a name to a zone, told as a network event."""
+    network = deployment.add_network(origin)
+    since = time.time()
+
+    deployment.add_container(network, name=unique("web"))
+
+    assert_watched_for(client, since, ("network", "connect"))
+
+
+def test_a_container_starting_is_watched_for(
+    client, deployment: Deployment, origin, unique
+):
+    """Watched for as well as the connect above, which comes first: a container
+    is connected before it runs, and a network lists it once it does."""
+    network = deployment.add_network(origin)
+    since = time.time()
+
+    deployment.add_container(network, name=unique("web"))
+
+    assert_watched_for(client, since, ("container", "start"))
+
+
+def test_a_container_being_removed_is_watched_for(
+    client, deployment: Deployment, origin, unique
+):
+    """What makes a name stop resolving, most of the time, and it is a container
+    event: one removed while it runs is not disconnected first, it is destroyed."""
+    network = deployment.add_network(origin)
+    container = deployment.add_container(network, name=unique("web"))
+    since = time.time()
+
+    deployment.remove(container)
+
+    assert_watched_for(client, since, ("container", "destroy"))
+
+
+def test_a_running_container_leaving_a_network_is_watched_for(
+    client, deployment: Deployment, origin, unique
+):
+    """A container can be taken off a network and go on running, and then no
+    container event says anything about it: this is the only word of it."""
+    network = deployment.add_network(origin)
+    container = deployment.add_container(network, name=unique("web"))
+    since = time.time()
+
+    client.networks.get(network.name).disconnect(container.get_wrapped_container().id)
+
+    assert_watched_for(client, since, ("network", "disconnect"))
+
+
+def test_a_container_dying_is_watched_for(
+    client, deployment: Deployment, origin, unique
+):
+    network = deployment.add_network(origin)
+    container = deployment.add_container(network, name=unique("web"))
+    since = time.time()
+
+    deployment.remove(container)
+
+    assert_watched_for(client, since, ("container", "die"))
+
+
+def test_a_container_being_renamed_is_watched_for(
+    client, deployment: Deployment, origin, unique
+):
+    """The one change of name that no network event says anything about, which
+    is why daenes watches for container events at all."""
+    network = deployment.add_network(origin)
+    container = deployment.add_container(network, name=unique("web"))
+    since = time.time()
+
+    container.get_wrapped_container().rename(unique("renamed"))
+
+    assert_watched_for(client, since, ("container", "rename"))
 
 
 def test_a_daemon_that_is_not_there_cannot_be_pinged(tmp_path, monkeypatch):

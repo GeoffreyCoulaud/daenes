@@ -7,6 +7,7 @@ reads like the deployment it stands for. What they answer with comes from
 
 from collections.abc import Iterator
 from ipaddress import ip_address
+from threading import Event
 from typing import Any
 
 import pytest
@@ -46,6 +47,31 @@ class FakeClock:
 @pytest.fixture
 def clock() -> FakeClock:
     return FakeClock()
+
+
+class FakeChangeNotifier:
+    """A deployment whose every answer was decided in advance.
+
+    Answers False once it has run out of them, which is a deployment holding
+    still, and raises an answer that is an exception where it stands.
+    """
+
+    def __init__(self, changes: tuple[bool | Exception, ...] = ()) -> None:
+        self.changes = list(changes)
+        self.waited: list[float] = []
+
+    def wait_for_change(self, timeout: float) -> bool:
+        self.waited.append(timeout)
+        if not self.changes:
+            return False
+        if isinstance(change := self.changes.pop(0), Exception):
+            raise change
+        return change
+
+
+@pytest.fixture
+def notifier() -> FakeChangeNotifier:
+    return FakeChangeNotifier()
 
 
 class FakeNetworkSource:
@@ -165,6 +191,11 @@ class FakeNetworkCollection:
         return list(self._networks)
 
 
+# Long enough that a test waiting it out has already failed, short enough that
+# the thread which waited it out is gone before the suite is.
+QUIET_CEILING = 10
+
+
 class FakeDockerClient:
     """A docker daemon that answers whatever the test connected to it."""
 
@@ -172,8 +203,68 @@ class FakeDockerClient:
         self,
         networks: tuple[FakeNetwork, ...] = (),
         error: Exception | None = None,
+        events: tuple[object, ...] = (),
+        events_error: Exception | None = None,
     ) -> None:
         self.networks = FakeNetworkCollection(networks, error)
+        self.event_filters: list[Any] = []
+        self.event_decoding: list[Any] = []
+        self._events = events
+        self._events_error = events_error
+
+    def events(self, filters: Any = None, decode: Any = None) -> Iterator[object]:
+        """The event stream, the way docker-py hands one over.
+
+        An error given as `events_error` is raised by this call, which is a
+        daemon that cannot be reached at all; one standing among the events is
+        raised where it stands, which is a stream stopping mid-sentence.
+        """
+        self.event_filters.append(filters)
+        self.event_decoding.append(decode)
+        if self._events_error is not None:
+            raise self._events_error
+        return _stream(self._events)
+
+
+def _stream(events: tuple[object, ...]) -> Iterator[object]:
+    """Every event in turn, raising the ones that are exceptions."""
+    for event in events:
+        if isinstance(event, Exception):
+            raise event
+        yield event
+
+
+class FakeQuietDockerClient:
+    """A daemon that is up and has nothing to say.
+
+    Its stream stays open and answers nothing, which is what a deployment
+    holding still looks like, and the only way to watch a wait run out.
+    """
+
+    def __init__(self) -> None:
+        self.event_filters: list[Any] = []
+        self.event_decoding: list[Any] = []
+        self.reading = Event()
+        self.done = Event()
+
+    def events(self, filters: Any = None, decode: Any = None) -> Iterator[object]:
+        self.event_filters.append(filters)
+        self.event_decoding.append(decode)
+        return self._quiet()
+
+    def _quiet(self) -> Iterator[object]:
+        """Say nothing at all, until the test says the waiting is over."""
+        self.reading.set()
+        self.done.wait(timeout=QUIET_CEILING)
+        yield from ()
+
+
+@pytest.fixture
+def quiet_client() -> Iterator[FakeQuietDockerClient]:
+    """A daemon with nothing to say, let go of once the test is over."""
+    client = FakeQuietDockerClient()
+    yield client
+    client.done.set()
 
 
 def addresses_of(zone: Zone, name: str) -> tuple[IpAddress, ...] | None:

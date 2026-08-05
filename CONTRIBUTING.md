@@ -49,7 +49,7 @@ Every other suite is asked for by path, with `-o addopts=""` to drop the coverag
 
 ### Contract tests
 
-Every branch in `daenes/main/docker.py` keys off something docker is assumed to do, and the unit tests can only restate those assumptions, since their fakes are where the assumptions live. These check them against a real daemon, one fact per test:
+Every branch in `daenes/main/docker.py` keys off something docker is assumed to do, and so does every action in the event filter of `daenes/main/docker_events.py`. The unit tests can only restate those assumptions, since their fakes are where the assumptions live. These check them against a real daemon, one fact per test:
 
 ```sh
 uv run pytest daenes/tests/end_to_end -o addopts="" -m contract
@@ -119,10 +119,10 @@ Inside `daenes/tests`:
 Inside `daenes/main`:
 
 - `model.py` is what daenes talks about: containers, networks, records, zones. It imports nothing but the standard library.
-- `ports.py` declares what the core needs from the outside world, as `Protocol`s: a clock, somewhere networks come from, somewhere zones go.
+- `ports.py` declares what the core needs from the outside world, as `Protocol`s: a clock, something that says the deployment changed, somewhere networks come from, somewhere zones go.
 - `zone_synchronizer.py` is the whole decision: which names a zone answers, with what, and when the file is worth rewriting. It knows nothing of docker or of files.
 - `dns_names.py` holds the name rules, one per RFC, so they can be read against the RFC they come from.
-- `docker.py` and `zone_files.py` are the two adapters, the only modules that know what docker and a file system are.
+- `docker.py`, `docker_events.py` and `zone_files.py` are the adapters, the only modules that know what docker and a file system are. The second reads the daemon's event stream, and turns everything it says into the one thing the core asks of it: that the deployment is worth reading again. It never looks inside an event, since the daemon is the one filtering them.
 - `application.py` is the loop, `config.py` the environment, `main.py` the wiring and the exit codes.
 
 A new port means a new `Protocol` in `ports.py`, an implementation of it in its own module, and a fake in `daenes/tests/unit/conftest.py`. The core never imports an adapter.

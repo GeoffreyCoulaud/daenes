@@ -6,17 +6,22 @@ it moves, and when it does not, is as much of the contract as the records are.
 
 import time
 
-from .conftest import NAMESERVER_NAME, SUCCESS_INTERVAL, TIMEOUT, poll_until
+from .conftest import NAMESERVER_NAME, RESYNC_INTERVAL, TIMEOUT, poll_until
 
 # Long enough for several passes to go by, so that a zone left alone is left
 # alone on purpose rather than not looked at yet.
 OBSERVED_PASSES = 3
 
+# What a change is given to reach the zone file, against a resync interval put
+# an hour out of the way: nothing but the docker events can bridge that.
+PROMPTLY = 10
+AN_HOUR = 3600
+
 
 def test_a_container_that_appears_is_published(
     network, deployment, start_daenes, zone, unique
 ):
-    """Nothing tells daenes about it: it finds out on its next pass."""
+    """Whether it was told or found out is settled below; here it is published."""
     web, late = unique("web"), unique("late")
     deployment.add_container(network, name=web)
     start_daenes()
@@ -25,6 +30,37 @@ def test_a_container_that_appears_is_published(
     deployment.add_container(network, name=late)
 
     assert zone.wait_for_names({NAMESERVER_NAME, web, late})
+
+
+def test_a_container_that_appears_is_published_without_waiting_for_a_pass(
+    network, deployment, start_daenes, zone, unique
+):
+    """The docker daemon tells daenes, which is what this proves: the next pass
+    daenes would make of its own accord is an hour out."""
+    web, late = unique("web"), unique("late")
+    deployment.add_container(network, name=web)
+    start_daenes(RESYNC_INTERVAL_SECONDS=AN_HOUR)
+    zone.wait_for_names({NAMESERVER_NAME, web})
+
+    deployment.add_container(network, name=late)
+
+    assert zone.wait_for_names({NAMESERVER_NAME, web, late}, timeout=PROMPTLY)
+
+
+def test_a_container_that_goes_away_stops_resolving_without_waiting_for_a_pass(
+    network, deployment, start_daenes, zone, unique
+):
+    """The same the other way round, and the one that matters more: a name
+    outliving its container is worse than a name that took a while to appear."""
+    web, going = unique("web"), unique("going")
+    deployment.add_container(network, name=web)
+    container = deployment.add_container(network, name=going)
+    start_daenes(RESYNC_INTERVAL_SECONDS=AN_HOUR)
+    zone.wait_for_names({NAMESERVER_NAME, web, going})
+
+    deployment.remove(container)
+
+    assert zone.wait_for_names({NAMESERVER_NAME, web}, timeout=PROMPTLY)
 
 
 def test_a_container_that_goes_away_stops_resolving(
@@ -51,7 +87,7 @@ def test_a_zone_nothing_changed_in_keeps_its_serial(
     zone.wait()
     serial = zone.serial()
 
-    time.sleep(SUCCESS_INTERVAL * OBSERVED_PASSES)
+    time.sleep(RESYNC_INTERVAL * OBSERVED_PASSES)
 
     assert zone.serial() == serial
 
