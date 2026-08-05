@@ -123,6 +123,17 @@ See the [example docker compose](#example-docker-compose) section for more infor
       <td>Optional</td>
       <td>Directory the zone files are written into</td>
     </tr>
+    <tr>
+      <td><code>ALLOW_MULTIPLE_ADDRESSES</code></td>
+      <td><code>false</code></td>
+      <td>Optional</td>
+      <td>
+        Whether one name may answer with several addresses of one family,
+        which is an advanced use and easy to arrive at by accident.<br>
+        See <a href="#when-one-name-would-answer-for-several-containers">below</a>.
+        Accepts <code>true</code> and <code>false</code>, and nothing else.
+      </td>
+    </tr>
   </tbody>
 </table>
 
@@ -205,9 +216,23 @@ A container answers over whichever families its network carries: A on an IPv4 ne
 
 A published network with nothing left on it still gets a zone, holding its nameserver alone, so the names that used to be there stop resolving. A zone is only rewritten when something in it changed, so its serial stays put as long as the deployment does.
 
-### When one name answers for several containers
+### When one name would answer for several containers
 
-Nothing forbids it, and nothing is dropped over it: the name answers with every address, a client reaches whichever one it is handed, and daenes says so in the logs. That is the same answer docker's own resolver gives, but a deployment does not always mean to ask for it. Two ways to get there:
+A client handed several addresses of one kind reaches whichever it picks, and only one of them may be the one it can actually reach. Since docker gives a container one address per family and per network, that only happens when two containers claim one name, or when one container sits on two networks of the same zone.
+
+By default daenes refuses to publish such a name at all, and says which addresses and which containers made it do so:
+
+```
+Ignoring the name 'api' entirely: it answers at 172.20.0.2, 172.21.0.4, from
+3ac191d7efba, 6fe54c612028, and a client would reach whichever of those it is
+handed. Set ALLOW_MULTIPLE_ADDRESSES to true to publish them all
+```
+
+Setting `ALLOW_MULTIPLE_ADDRESSES=true` publishes every address instead, without a word, which is the answer docker's own resolver gives. It is a deliberate use: round-robin between containers that really are interchangeable.
+
+A container answering over both families is never concerned: an A and an AAAA are one host over two protocols, not a choice between two hosts.
+
+Two ways to arrive at it:
 
 **Two networks naming the same domain.** Their containers land in one zone, which is what naming the same domain is for. If each network holds a container of the same name, that name now answers for both, and a client has no way of telling which one it will reach.
 
@@ -230,7 +255,7 @@ services:
     image: some/legacy
 ```
 
-Both cases are reported as `The name 'api' answers for 2 containers at once`. Give one of them a `daenes.domain` label if that is not what you wanted.
+In both cases, give one of the containers a `daenes.domain` label of its own if the collision was not intended, or turn `ALLOW_MULTIPLE_ADDRESSES` on if it was.
 
 ## Upgrading from 0.2 to 1.0
 

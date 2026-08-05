@@ -89,6 +89,9 @@ def write_zone(
         store=store,
         nameserver_address=NAMESERVER_ADDRESS,
         ttl=ttl,
+        # Always on here, since it is the setting that puts the most into a
+        # zone. What the other one writes is a subset of these records.
+        allow_multiple_addresses=True,
     ).synchronize()
     return directory / f"{origin}.zone"
 

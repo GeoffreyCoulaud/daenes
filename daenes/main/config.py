@@ -10,6 +10,12 @@ DEFAULT_ZONES_DIRECTORY = "/zones"
 DEFAULT_TTL = 60
 DEFAULT_SUCCESS_INTERVAL = 60
 DEFAULT_RETRY_INTERVAL = 10
+# Off unless asked for: a name answering with several addresses of one family
+# is something a deployment arrives at by accident more often than on purpose.
+DEFAULT_ALLOW_MULTIPLE_ADDRESSES = False
+
+TRUE = "true"
+FALSE = "false"
 
 
 class ConfigurationError(Exception):
@@ -31,6 +37,7 @@ class Config:
     ttl: int
     success_interval: int
     retry_interval: int
+    allow_multiple_addresses: bool
 
 
 def _get_required(name: str) -> str:
@@ -62,6 +69,22 @@ def _get_integer(name: str, default: int, minimum: int) -> int:
     return number
 
 
+def _get_boolean(name: str, default: bool) -> bool:
+    """Read a setting that is on or off, and nothing in between.
+
+    Refusing everything but the two words keeps a value that reads like a yes
+    from quietly meaning no.
+    """
+    if (value := getenv(name)) is None:
+        return default
+    if (spelled := value.strip().lower()) not in (TRUE, FALSE):
+        raise ConfigurationError(
+            ReturnCodes.INVALID_ENVIRONMENT_VARIABLE,
+            f"Environment variable {name} must be {TRUE} or {FALSE}, got {value!r}",
+        )
+    return spelled == TRUE
+
+
 def _get_nameserver_address() -> IpAddress:
     """Read the address of the DNS server the zones name as their own."""
     value = _get_required("DNS_IP")
@@ -86,5 +109,8 @@ def get_configuration() -> Config:
         ),
         retry_interval=_get_integer(
             "RETRY_INTERVAL", DEFAULT_RETRY_INTERVAL, minimum=1
+        ),
+        allow_multiple_addresses=_get_boolean(
+            "ALLOW_MULTIPLE_ADDRESSES", DEFAULT_ALLOW_MULTIPLE_ADDRESSES
         ),
     )

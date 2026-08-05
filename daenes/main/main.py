@@ -55,6 +55,7 @@ def build_application(config: Config, client: DockerClient) -> Application:
             store=FileSystemZoneStore(directory=config.zones_directory),
             nameserver_address=config.nameserver_address,
             ttl=config.ttl,
+            allow_multiple_addresses=config.allow_multiple_addresses,
         ),
         clock=SystemClock(),
         retry_interval=config.retry_interval,

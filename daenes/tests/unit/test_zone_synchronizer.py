@@ -25,7 +25,7 @@ from .conftest import (
 )
 
 
-def make_synchronizer(networks, store=None):
+def make_synchronizer(networks, store=None, allow_multiple_addresses=False):
     """A synchronizer over a deployment and a store the test can look into."""
     source = FakeNetworkSource(tuple(networks))
     store = FakeZoneStore() if store is None else store
@@ -34,20 +34,25 @@ def make_synchronizer(networks, store=None):
         store=store,
         nameserver_address=NAMESERVER_ADDRESS,
         ttl=TTL,
+        allow_multiple_addresses=allow_multiple_addresses,
     )
     return synchronizer, source, store
 
 
-def synchronize(*networks, store=None):
+def synchronize(*networks, store=None, allow_multiple_addresses=False):
     """Run one synchronization, and answer the zones it wrote."""
-    synchronizer, _, store = make_synchronizer(networks, store)
+    synchronizer, _, store = make_synchronizer(
+        networks, store, allow_multiple_addresses
+    )
     synchronizer.synchronize()
     return store.saved
 
 
-def synchronize_one(*networks, store=None):
+def synchronize_one(*networks, store=None, allow_multiple_addresses=False):
     """Run one synchronization that is expected to write exactly one zone."""
-    saved = synchronize(*networks, store=store)
+    saved = synchronize(
+        *networks, store=store, allow_multiple_addresses=allow_multiple_addresses
+    )
     assert len(saved) == 1
     return saved[0]
 
@@ -100,10 +105,11 @@ def test_an_origin_is_matched_without_regard_to_case():
 
 
 def test_a_container_reachable_at_several_addresses_answers_with_all_of_them():
-    """The client picks; which one it can reach is not ours to guess."""
+    """Once the deployment asks for it, the client picks and daenes says nothing."""
     zone = synchronize_one(
         make_published_network(make_domain(name="web", addresses=("172.20.0.2",))),
         make_published_network(make_domain(name="web", addresses=("172.21.0.9",))),
+        allow_multiple_addresses=True,
     )
 
     assert addresses_of(zone, "web") == (
@@ -116,7 +122,9 @@ def test_addresses_are_ordered_by_family_then_value():
     """The two families do not compare, and the output has to be stable."""
     domain = make_domain(name="web", addresses=("fd00::2", "172.20.0.9", "172.20.0.2"))
 
-    zone = synchronize_one(make_published_network(domain))
+    zone = synchronize_one(
+        make_published_network(domain), allow_multiple_addresses=True
+    )
 
     assert addresses_of(zone, "web") == (
         ip_address("172.20.0.2"),
@@ -153,6 +161,7 @@ def test_an_alias_of_a_container_on_two_networks_answers_with_both_addresses():
         make_published_network(
             make_domain(name="web", addresses=("172.21.0.2",), aliases=("www",))
         ),
+        allow_multiple_addresses=True,
     )
 
     assert addresses_of(zone, "www") == (
@@ -170,8 +179,8 @@ def test_a_container_kept_out_of_dns_still_answers_through_its_aliases():
     assert set(names_of(zone)) == {NAMESERVER_NAME, "api"}
 
 
-def test_a_name_shared_by_a_container_and_an_alias_answers_with_both(caplog):
-    """Nothing is dropped, but a deployment rarely means to ask for this."""
+def test_a_name_shared_by_a_container_and_an_alias_is_dropped(caplog):
+    """A deployment arrives at this by accident more often than on purpose."""
     zone = synchronize_one(
         make_published_network(
             make_domain(name="www", addresses=("172.20.0.3",)),
@@ -179,14 +188,12 @@ def test_a_name_shared_by_a_container_and_an_alias_answers_with_both(caplog):
         )
     )
 
-    assert addresses_of(zone, "www") == (
-        ip_address("172.20.0.2"),
-        ip_address("172.20.0.3"),
-    )
-    assert "answers for 2 containers" in caplog.text
+    assert addresses_of(zone, "www") is None
+    assert addresses_of(zone, "web") == (ip_address("172.20.0.2"),)
+    assert "Ignoring the name 'www'" in caplog.text
 
 
-def test_a_name_two_containers_claim_answers_with_both(caplog):
+def test_a_name_two_containers_claim_is_dropped(caplog):
     """Two networks sharing a domain may each hold a container of one name."""
     zone = synchronize_one(
         make_published_network(
@@ -197,22 +204,52 @@ def test_a_name_two_containers_claim_answers_with_both(caplog):
         ),
     )
 
-    assert addresses_of(zone, "web") == (
-        ip_address("172.20.0.2"),
-        ip_address("172.21.0.2"),
-    )
-    assert "answers for 2 containers" in caplog.text
+    assert addresses_of(zone, "web") is None
+    assert "172.20.0.2, 172.21.0.2" in caplog.text
+    assert "one, two" in caplog.text
 
 
-def test_a_container_on_two_networks_is_not_reported_as_shared(caplog):
-    """It is one container with two homes, which is what merging zones is for."""
+def test_a_container_on_two_networks_of_one_zone_is_dropped_too(caplog):
+    """One container or two, a client still reaches whichever it is handed."""
     zone = synchronize_one(
         make_published_network(make_domain(name="web", addresses=("172.20.0.2",))),
         make_published_network(make_domain(name="web", addresses=("172.21.0.2",))),
     )
 
-    assert len(addresses_of(zone, "web") or ()) == 2
-    assert "answers for" not in caplog.text
+    assert addresses_of(zone, "web") is None
+    assert "Ignoring the name 'web'" in caplog.text
+
+
+def test_a_name_answering_over_both_families_is_left_alone(caplog):
+    """Dual stack is one host over two protocols, not a choice between two."""
+    domain = make_domain(name="web", addresses=("172.20.0.2", "fd00::2"))
+
+    zone = synchronize_one(make_published_network(domain))
+
+    assert addresses_of(zone, "web") == (
+        ip_address("172.20.0.2"),
+        ip_address("fd00::2"),
+    )
+    assert "Ignoring" not in caplog.text
+
+
+def test_several_addresses_may_be_asked_for(caplog):
+    """The advanced use, which has to be turned on rather than fallen into."""
+    zone = synchronize_one(
+        make_published_network(
+            make_domain(name="web", addresses=("172.20.0.2",), container="one")
+        ),
+        make_published_network(
+            make_domain(name="web", addresses=("172.21.0.2",), container="two")
+        ),
+        allow_multiple_addresses=True,
+    )
+
+    assert addresses_of(zone, "web") == (
+        ip_address("172.20.0.2"),
+        ip_address("172.21.0.2"),
+    )
+    assert not caplog.text
 
 
 @pytest.mark.parametrize(

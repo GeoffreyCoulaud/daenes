@@ -36,6 +36,7 @@ CONFIG = Config(
     ttl=60,
     success_interval=60,
     retry_interval=10,
+    allow_multiple_addresses=False,
 )
 
 

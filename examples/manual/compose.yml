@@ -98,8 +98,9 @@ services:
       - services
 
   # Compose makes this service's name an alias on the network, and the
-  # container below claims the very same name. Both answer at it, and daenes
-  # says so rather than choosing.
+  # container below claims the very same name. Neither is published under it,
+  # since a client would reach whichever it was handed. Set
+  # ALLOW_MULTIPLE_ADDRESSES to true above to see both published instead.
   shared-name:
     image: httpd:latest
     volumes:

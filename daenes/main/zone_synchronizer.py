@@ -1,4 +1,5 @@
 import logging
+from collections import Counter
 from collections.abc import Iterator
 
 from .dns_names import MAX_NAME_LENGTH, is_valid_name, normalize
@@ -29,11 +30,13 @@ class ZoneSynchronizer:
         store: ZoneStore,
         nameserver_address: IpAddress,
         ttl: int,
+        allow_multiple_addresses: bool,
     ) -> None:
         self._source = source
         self._store = store
         self._nameserver_address = nameserver_address
         self._ttl = ttl
+        self._allow_multiple_addresses = allow_multiple_addresses
         # The last zone written for each origin, so an unchanged zone is left
         # alone rather than rewritten with a new serial, which every secondary
         # server would take for news. Only records can change while the process
@@ -123,14 +126,15 @@ class ZoneSynchronizer:
         addresses: dict[str, set[IpAddress]] = {
             NAMESERVER_NAME: {self._nameserver_address}
         }
-        # Which containers ended up answering on each name, to report the ones
-        # answering for several. The nameserver is nobody's container.
+        # Which containers ended up answering on each name, to say so when one
+        # is dropped over them. The nameserver is nobody's container.
         containers: dict[str, set[str]] = {}
         for domain in sorted(domains, key=lambda domain: domain.name):
             for name in self._get_names(origin, domain):
                 addresses.setdefault(name, set()).update(domain.addresses)
                 containers.setdefault(name, set()).add(domain.container)
-        _report_shared_names(containers)
+        if not self._allow_multiple_addresses:
+            _drop_shared_names(addresses, containers)
         return tuple(
             AddressRecord(
                 name=name,
@@ -184,23 +188,34 @@ class ZoneSynchronizer:
         return name
 
 
-def _report_shared_names(containers: dict[str, set[str]]) -> None:
-    """Say which names ended up answering for more than one container.
+def _drop_shared_names(
+    addresses: dict[str, set[IpAddress]],
+    containers: dict[str, set[str]],
+) -> None:
+    """Remove the names answering with several addresses of one family.
 
-    Nothing is dropped over it: the name answers with every address, which is
-    what docker's own resolver answers too. It is worth saying all the same,
-    since a client reaches whichever address it is handed, and the deployment
-    may not have meant to ask for that.
+    A client handed several addresses of a kind reaches whichever one it
+    picks, and only one of them may be the one it can reach. Docker gives a
+    container one address per family and network, so this is always either two
+    containers claiming a name or one container on two networks of one zone.
+
+    A container answering over both families is untouched: those two addresses
+    are the same host over two protocols, not a choice between two hosts.
     """
-    for name, claimants in sorted(containers.items()):
-        if len(claimants) > 1:
-            logging.warning(
-                "The name %r answers for %d containers at once (%s). "
-                "Clients will reach whichever of them they are handed",
-                name,
-                len(claimants),
-                ", ".join(sorted(claimants)),
-            )
+    for name in sorted(addresses):
+        found = addresses[name]
+        families = Counter(address.version for address in found)
+        if all(count == 1 for count in families.values()):
+            continue
+        logging.warning(
+            "Ignoring the name %r entirely: it answers at %s, from %s, and a "
+            "client would reach whichever of those it is handed. Set "
+            "ALLOW_MULTIPLE_ADDRESSES to true to publish them all",
+            name,
+            ", ".join(str(address) for address in sorted(found, key=_address_sort_key)),
+            ", ".join(sorted(containers[name])),
+        )
+        del addresses[name]
 
 
 def _address_sort_key(address: IpAddress) -> tuple[int, bytes]:
