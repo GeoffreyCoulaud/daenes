@@ -142,12 +142,18 @@ def test_a_container_may_opt_out():
     assert not domains_of(source)
 
 
-def test_a_container_may_name_the_domain_it_wants():
+def test_a_container_is_named_by_docker_alone():
+    """Its own name, plus whatever aliases docker gives it on the network."""
     source = make_source(
-        make_network(make_container(name="web", labels={DOMAIN_LABEL: "front"}))
+        make_network(
+            make_container(name="web", labels={DOMAIN_LABEL: "front"}, aliases=("api",))
+        )
     )
 
-    assert domains_of(source)[0].name == "front"
+    domain = domains_of(source)[0]
+
+    assert domain.name == "web"
+    assert domain.aliases == frozenset({"api"})
 
 
 def test_a_container_that_left_the_network_is_ignored():

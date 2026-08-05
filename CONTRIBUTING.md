@@ -57,7 +57,7 @@ The checker runs with the rules BIND applies to a primary zone rather than its o
 
 ## Try it against a real docker daemon
 
-There are no end-to-end tests. What stands in for them is [`examples/manual`](examples/manual), a deployment covering every rule daenes follows: a network that publishes nothing, a container opting out, one renamed by a label, one on two networks, one whose name no host may bear, and aliases.
+There are no end-to-end tests. What stands in for them is [`examples/manual`](examples/manual), a deployment covering every rule daenes follows: a network that publishes nothing, a container opting out, one on two networks, one whose name no host may bear, one sharing a name with another, and aliases.
 
 ```sh
 cd examples/manual

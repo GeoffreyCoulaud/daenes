@@ -161,7 +161,7 @@ class ZoneSynchronizer:
         if not is_valid_name(name):
             logging.warning(
                 "Ignoring the name %r of zone %s: not a valid domain name, "
-                "give that container one of its own",
+                "rename that container or give it a network alias",
                 label,
                 origin,
             )

@@ -46,15 +46,16 @@ services:
     networks:
       - services
 
+  # Answers at its own name and at the alias, both of them addresses.
   web3:
-    container_name: should-be-renamed-by-label
+    container_name: included-with-an-alias
     image: httpd:latest
     volumes:
       - ../sample-website:/usr/local/apache2/htdocs
     networks:
-      - services
-    labels:
-      - daenes.domain=included-renamed-by-label
+      services:
+        aliases:
+          - included-by-alias
 
   web4:
     container_name: invisible-explicitly-disabled

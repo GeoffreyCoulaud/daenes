@@ -12,6 +12,9 @@ from requests.exceptions import RequestException
 from .errors import RetryableError
 from .model import IpAddress, LocalDomain, PublishedNetwork
 
+# The label a network publishes a zone with, and the one a container opts out
+# with. A container is named by docker alone: its own name and its network
+# aliases, which are what docker already has for saying "call me this too".
 DOMAIN_LABEL = "daenes.domain"
 ENABLED_LABEL = "daenes.enabled"
 
@@ -121,7 +124,7 @@ class DockerDomainSource:
         if not _is_enabled(container):
             logging.debug("Container %s opted out of daenes", container.name)
             return None
-        name = _get_name(container)
+        name = cast(str, container.name)
         # A container may have left the network since it was listed.
         settings = container.attrs["NetworkSettings"]["Networks"].get(network.name)
         if settings is None:
@@ -147,11 +150,6 @@ def _get_labels(network: Network) -> dict[str, str]:
 def _is_enabled(container: Container) -> bool:
     """Whether a container wants publishing, which it does unless it says no."""
     return container.labels.get(ENABLED_LABEL, "true") == "true"
-
-
-def _get_name(container: Container) -> str:
-    """The name a container asks for: its label, or its own name without one."""
-    return container.labels.get(DOMAIN_LABEL) or cast(str, container.name)
 
 
 def _get_addresses(settings: dict[str, Any]) -> Iterator[IpAddress]:
